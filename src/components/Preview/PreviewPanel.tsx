@@ -78,9 +78,10 @@ ${cleaned}`;
   throw new Error('No mainImage() or main() function found');
 }
 
-export function PreviewPanel({ maximized, onToggleMaximize }: {
+export function PreviewPanel({ maximized, onToggleMaximize, style }: {
   maximized?: boolean;
   onToggleMaximize?: () => void;
+  style?: React.CSSProperties;
 } = {}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const glRef = useRef<WebGL2RenderingContext | null>(null);
@@ -362,14 +363,24 @@ export function PreviewPanel({ maximized, onToggleMaximize }: {
     };
   }, [initWebGL, startRenderLoop]);
 
-  // Handle resize
+  // Handle resize — window and container
   useEffect(() => {
-    const handleResize = () => {
-      resizeCanvas();
-    };
+    const handleResize = () => resizeCanvas();
 
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+
+    // ResizeObserver on canvas container for panel resize
+    const container = canvasRef.current?.parentElement;
+    let observer: ResizeObserver | undefined;
+    if (container) {
+      observer = new ResizeObserver(() => resizeCanvas());
+      observer.observe(container);
+    }
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      observer?.disconnect();
+    };
   }, [resizeCanvas]);
 
   // Compile shader when code changes
@@ -426,15 +437,18 @@ export function PreviewPanel({ maximized, onToggleMaximize }: {
 
   return (
     <div className="preview-panel panel" ref={containerRef} style={{
-      position: isFullscreen ? 'fixed' : undefined,
-      top: isFullscreen ? 0 : undefined,
-      left: isFullscreen ? 0 : undefined,
-      right: isFullscreen ? 0 : undefined,
-      bottom: isFullscreen ? 0 : undefined,
-      width: isFullscreen ? '100vw' : undefined,
-      height: isFullscreen ? '100vh' : undefined,
-      zIndex: isFullscreen ? 9999 : undefined,
-      background: isFullscreen ? '#000' : undefined,
+      ...style,
+      ...(isFullscreen ? {
+        position: 'fixed' as const,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: '100vw',
+        height: '100vh',
+        zIndex: 9999,
+        background: '#000',
+      } : undefined),
     }}>
       <div className="panel-header">
         <span className="panel-title">Preview</span>

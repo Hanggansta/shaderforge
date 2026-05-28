@@ -19,11 +19,35 @@ interface UiState {
   setTheme: (theme: 'dark' | 'light') => void;
 }
 
+const STORAGE_KEY = 'shaderforge-panel-widths';
+
+function loadPersistedWidths(): { ai?: number; preview?: number } {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch {
+    // ignore
+  }
+  return {};
+}
+
+function persistWidths(ai?: number, preview?: number) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ai, preview }));
+  } catch {
+    // ignore
+  }
+}
+
+const persisted = loadPersistedWidths();
+
 export const useUiStore = create<UiState>((set) => ({
   panels: {
-    ai: { collapsed: false, width: 300 },
+    ai: { collapsed: false, width: persisted.ai ?? 300 },
     editor: { collapsed: false },
-    preview: { collapsed: false, width: 400 },
+    preview: { collapsed: false, width: persisted.preview ?? 400 },
   },
   activeTab: 'code',
   theme: 'dark',
@@ -34,12 +58,14 @@ export const useUiStore = create<UiState>((set) => ({
       [panel]: { ...state.panels[panel], collapsed: !state.panels[panel].collapsed },
     },
   })),
-  setPanelWidth: (panel, width) => set((state) => ({
-    panels: {
+  setPanelWidth: (panel, width) => set((state) => {
+    const newPanels = {
       ...state.panels,
       [panel]: { ...state.panels[panel], width },
-    },
-  })),
+    };
+    persistWidths(newPanels.ai.width, newPanels.preview.width);
+    return { panels: newPanels };
+  }),
   setActiveTab: (activeTab) => set({ activeTab }),
   setTheme: (theme) => set({ theme }),
 }));

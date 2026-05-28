@@ -117,9 +117,10 @@
 
 /* AI Panel */
 .ai-panel {
-  width: 300px;
-  min-width: 250px;
+  min-width: 240px;
+  max-width: 460px;
   flex-shrink: 0;
+  overflow: hidden;
 }
 
 .ai-panel .panel-content {
@@ -268,9 +269,10 @@
 
 /* Preview Panel */
 .preview-panel {
-  width: 400px;
-  min-width: 300px;
+  min-width: 320px;
+  max-width: 55vw;
   flex-shrink: 0;
+  overflow: hidden;
 }
 
 .preview-panel .panel-content {
@@ -365,10 +367,17 @@
   background: transparent;
   transition: background 0.15s ease;
   flex-shrink: 0;
+  touch-action: none;
 }
 
-.resize-handle:hover {
+.resize-handle:hover,
+.resize-handle.active {
   background: var(--accent-blue);
+}
+
+.resize-handle.active {
+  width: 5px;
+  background: #58a6ff;
 }
 
 /* Loading spinner */

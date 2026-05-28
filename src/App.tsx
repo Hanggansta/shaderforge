@@ -7,6 +7,8 @@ import { Toolbar } from './components/Toolbar/Toolbar';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useProjectStore } from './store/projectStore';
 import { useEditorStore } from './store/editorStore';
+import { useUiStore } from './store/uiStore';
+import { usePanelResize } from './hooks/usePanelResize';
 import { decodeShaderFromUrl } from './utils/shareUrl';
 import './App.css';
 
@@ -14,6 +16,12 @@ function App() {
   const loadProjects = useProjectStore((s) => s.loadProjects);
   const setCode = useEditorStore((s) => s.setCode);
   const [previewMaximized, setPreviewMaximized] = useState(false);
+
+  const aiWidth = useUiStore((s) => s.panels.ai.width ?? 300);
+  const previewWidth = useUiStore((s) => s.panels.preview.width ?? 400);
+
+  const aiEditorResize = usePanelResize('ai', 'editor');
+  const editorPreviewResize = usePanelResize('editor', 'preview');
 
   // Load projects and check for shared URL on mount
   useEffect(() => {
@@ -41,7 +49,7 @@ function App() {
         {!previewMaximized && (
           <>
             <ErrorBoundary name="AI Copilot" fallback={
-              <div className="ai-panel panel">
+              <div className="ai-panel panel" style={{ width: aiWidth }}>
                 <div className="panel-header">
                   <span className="panel-title">AI Copilot</span>
                 </div>
@@ -56,10 +64,13 @@ function App() {
                 </div>
               </div>
             }>
-              <AIChatPanel />
+              <AIChatPanel style={{ width: aiWidth }} />
             </ErrorBoundary>
 
-            <div className="resize-handle" />
+            <div
+              className="resize-handle"
+              onPointerDown={aiEditorResize.handlePointerDown}
+            />
 
             <ErrorBoundary name="Editor">
               <div className="editor-panel panel">
@@ -73,12 +84,18 @@ function App() {
               </div>
             </ErrorBoundary>
 
-            <div className="resize-handle" />
+            <div
+              className="resize-handle"
+              onPointerDown={editorPreviewResize.handlePointerDown}
+            />
           </>
         )}
 
         <ErrorBoundary name="Preview" fallback={
-          <div className="preview-panel panel" style={{ flex: previewMaximized ? 1 : undefined }}>
+          <div className="preview-panel panel" style={{
+            flex: previewMaximized ? 1 : undefined,
+            width: previewMaximized ? undefined : previewWidth,
+          }}>
             <div className="panel-header">
               <span className="panel-title">Preview</span>
             </div>
@@ -97,6 +114,10 @@ function App() {
           <PreviewPanel
             maximized={previewMaximized}
             onToggleMaximize={handleToggleMaximize}
+            style={{
+              width: previewMaximized ? undefined : previewWidth,
+              flexShrink: previewMaximized ? undefined : 0,
+            }}
           />
         </ErrorBoundary>
       </div>

@@ -25,7 +25,7 @@ const STATUS_ICONS: Record<string, string> = {
   idle: '⏳',
 };
 
-export function AIChatPanel() {
+export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
   const [input, setInput] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [currentProgress, setCurrentProgress] = useState<AgentProgress | null>(null);
@@ -203,7 +203,7 @@ export function AIChatPanel() {
 
   return (
     <>
-      <div className="ai-panel panel">
+      <div className="ai-panel panel" style={style}>
         <div className="panel-header">
           <span className="panel-title">AI Copilot</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
