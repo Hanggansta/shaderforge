@@ -101,12 +101,13 @@ export function PreviewPanel({ maximized, onToggleMaximize }: {
   const setLastValidCode = useEditorStore((s) => s.setLastValidCode);
 
   const isPlaying = usePreviewStore((s) => s.isPlaying);
+  const fps = usePreviewStore((s) => s.fps);
   const setPlaying = usePreviewStore((s) => s.setPlaying);
   const setResolution = usePreviewStore((s) => s.setResolution);
   const setFps = usePreviewStore((s) => s.setFps);
   const setCompileResult = usePreviewStore((s) => s.setCompileResult);
 
-  const fpsCounterRef = useRef({ frames: 0, lastTime: 0 });
+  const fpsCounterRef = useRef({ frames: 0, lastTime: performance.now() / 1000 });
 
   const compileShader = useCallback((gl: WebGL2RenderingContext, source: string, type: number): WebGLShader | null => {
     const shader = gl.createShader(type);
@@ -133,8 +134,8 @@ export function PreviewPanel({ maximized, onToggleMaximize }: {
       const match = line.match(/(?:ERROR:\s*)?(\d+):(\d+)(?:\(\d+\))?:\s*(.*)/);
       if (match) {
         const lineNum = parseInt(match[2], 10);
-        // Adjust for wrapper offset (9 lines of wrapper code)
-        const userLine = Math.max(1, lineNum - 9);
+        // Adjust for wrapper offset (11 lines of header before user code)
+        const userLine = Math.max(1, lineNum - 11);
         errors.push({ line: userLine, message: match[3].trim() });
       }
     }
@@ -248,6 +249,9 @@ export function PreviewPanel({ maximized, onToggleMaximize }: {
       setCompileResult('success');
       setLastValidCode(userCode);
 
+      // Reset FPS counter so first measurement starts fresh
+      fpsCounterRef.current = { frames: 0, lastTime: performance.now() / 1000 };
+
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
@@ -313,15 +317,18 @@ export function PreviewPanel({ maximized, onToggleMaximize }: {
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }, [setFps]);
 
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
+
   const startRenderLoop = useCallback(() => {
     const loop = () => {
-      if (isPlaying) {
+      if (isPlayingRef.current) {
         render();
       }
       animFrameRef.current = requestAnimationFrame(loop);
     };
     loop();
-  }, [isPlaying, render]);
+  }, [render]);
 
   const resizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -351,12 +358,6 @@ export function PreviewPanel({ maximized, onToggleMaximize }: {
     return () => {
       if (animFrameRef.current) {
         cancelAnimationFrame(animFrameRef.current);
-      }
-      if (glRef.current) {
-        const gl = glRef.current;
-        if (programRef.current) {
-          gl.deleteProgram(programRef.current);
-        }
       }
     };
   }, [initWebGL, startRenderLoop]);
@@ -488,7 +489,7 @@ export function PreviewPanel({ maximized, onToggleMaximize }: {
             </button>
           </div>
           <div className="preview-controls-right">
-            <span>FPS: {usePreviewStore.getState().fps}</span>
+            <span>FPS: {fps}</span>
           </div>
         </div>
       </div>
