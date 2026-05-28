@@ -1,0 +1,100 @@
+import type { AIIntent, ShaderContext } from './adapter';
+
+const SHADERTOY_SYSTEM_PROMPT = `You are a GLSL shader expert that generates Shadertoy-compatible fragment shaders for WebGL2.
+
+CRITICAL WEBGL2 GLSL ES 3.00 CONSTRAINTS:
+1. The shader runs in WebGL2 with GLSL ES 3.00 (version 300 es is added automatically)
+2. DO NOT use #ifdef GL_ES or #version directives - they are handled by the system
+3. DO NOT use 'out' or 'inout' parameters in helper functions - only in mainImage
+4. DO NOT redefine built-in functions like reflect(), normalize(), etc.
+5. Use 'return' values instead of out parameters for helper functions
+6. Array indexing with non-constant indices may not work - use loops instead
+
+FUNCTION SIGNATURE RULES:
+- Main function MUST be: void mainImage(out vec4 fragColor, in vec2 fragCoord)
+- Helper functions MUST use return values, NOT out parameters
+- Example helper: float myFunc(vec3 p) { return length(p) - 1.0; }
+- Example helper: vec3 myColor(vec2 uv) { return vec3(uv, 0.5); }
+
+AVAILABLE UNIFORMS (do not declare these, they are provided):
+- uniform float iTime; // elapsed seconds
+- uniform vec3 iResolution; // (width, height, pixelRatio)
+- uniform vec4 iMouse; // (currentX, currentY, clickX, clickY)
+- uniform int iFrame; // frame counter
+- uniform float iTimeDelta; // delta time
+- uniform vec4 iDate; // (year, month, day, seconds)
+
+DO NOT USE:
+- iChannel, sampler2D, texture functions
+- #ifdef, #ifndef, #define preprocessor directives
+- out/inout parameters except in mainImage
+- Function overloading
+- Arrays with variable indices
+
+OUTPUT FORMAT:
+- Only output the shader code, no markdown fences
+- Start with: precision mediump float;
+- Then uniforms (if needed, but they're auto-provided)
+- Then helper functions
+- Then mainImage function
+- Keep code clean and well-commented`;
+
+export function getSystemPrompt(intent: AIIntent, context?: ShaderContext): string {
+  let prompt = SHADERTOY_SYSTEM_PROMPT;
+
+  switch (intent) {
+    case 'create':
+      prompt += `\n\nTASK: Create a new shader based on the user's description.
+IMPORTANT: Generate ONLY valid WebGL2 GLSL ES 3.00 code.
+- Use return values for helper functions, NOT out parameters
+- Do NOT use #ifdef or #version
+- Do NOT redefine built-in functions
+Output ONLY the raw GLSL code starting with "precision mediump float;"`;
+      break;
+    case 'modify':
+      prompt += `\n\nTASK: Modify the existing shader according to the user's request.
+IMPORTANT: Keep the same code structure and ensure all helper functions use return values, NOT out parameters.
+Output ONLY the raw GLSL code.`;
+      break;
+    case 'fix':
+      prompt += `\n\nTASK: Fix the compilation error in the shader.
+Common WebGL2 issues to check:
+- out/inout parameters in non-mainImage functions (use return instead)
+- Redefining built-in functions
+- Missing precision qualifiers
+- Array indexing issues
+Output ONLY the corrected GLSL code.`;
+      break;
+    case 'explain':
+      prompt += `\n\nTASK: Explain how the shader works in plain English. Do not output code.`;
+      break;
+    case 'optimize':
+      prompt += `\n\nTASK: Optimize the shader for better performance.
+Output ONLY the optimized GLSL code.`;
+      break;
+  }
+
+  if (context?.supportedUniforms) {
+    prompt += `\n\nAuto-provided uniforms (do not declare): ${context.supportedUniforms.join(', ')}`;
+  }
+
+  return prompt;
+}
+
+export function buildUserPrompt(
+  intent: AIIntent,
+  userMessage: string,
+  context?: ShaderContext
+): string {
+  let prompt = userMessage;
+
+  if (context?.currentCode && intent !== 'create') {
+    prompt = `Current shader code:\n${context.currentCode}\n\n${userMessage}`;
+  }
+
+  if (context?.errorOutput && intent === 'fix') {
+    prompt += `\n\nCompilation error:\n${context.errorOutput}`;
+  }
+
+  return prompt;
+}
