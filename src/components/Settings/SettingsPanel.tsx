@@ -3,6 +3,7 @@ import { useAIStore } from '../../store/aiStore';
 import { aiService } from '../../ai/service';
 import { OpenAICompatibleProvider } from '../../ai/providers/openai-compatible';
 import { MockAIProvider } from '../../ai/providers/mock';
+import { normalizeProviderError } from '../../ai/errors/provider-errors';
 
 interface SettingsPanelProps {
   isOpen: boolean;
@@ -11,12 +12,19 @@ interface SettingsPanelProps {
 
 const PROVIDER_PRESETS = [
   { id: 'mock', name: 'Mock AI (Testing)', description: 'No API key needed' },
-  { id: 'deepseek', name: 'DeepSeek', description: 'DeepSeek Chat API' },
+  { id: 'deepseek', name: 'DeepSeek', description: 'deepseek-v4-pro' },
   { id: 'openai', name: 'OpenAI', description: 'GPT-4o-mini, GPT-4o, etc.' },
   { id: 'groq', name: 'Groq', description: 'Fast inference with Llama models' },
   { id: 'together', name: 'Together AI', description: 'Open source models' },
   { id: 'custom', name: 'Custom (OpenAI-compatible)', description: 'Any OpenAI-compatible API' },
 ];
+
+const PROVIDER_DEFAULT_MODELS: Record<string, string> = {
+  deepseek: 'deepseek-v4-pro',
+  openai: 'gpt-4o-mini',
+  groq: 'llama-3.3-70b-versatile',
+  together: 'meta-llama/Llama-3-70b-chat-hf',
+};
 
 const STORAGE_KEY = 'shaderforge-ai-settings';
 
@@ -31,14 +39,14 @@ function loadSettings(): AISettings {
   try {
     const data = sessionStorage.getItem(STORAGE_KEY);
     if (data) return JSON.parse(data);
-  } catch {}
+  } catch { /* ignore parse errors */ }
   return { provider: 'mock', apiKey: '', baseUrl: '', model: '' };
 }
 
 function saveSettings(settings: AISettings): void {
   try {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-  } catch {}
+  } catch { /* storage unavailable */ }
 }
 
 export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
@@ -51,7 +59,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
 
   useEffect(() => {
     if (isOpen) {
-      setSettings(loadSettings());
+      setSettings(loadSettings()); // eslint-disable-line react-hooks/set-state-in-effect -- reload from storage
     }
   }, [isOpen]);
 
@@ -104,7 +112,10 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
       }
     } catch (error) {
       setTestStatus('error');
-      setTestError(error instanceof Error ? error.message : 'Unknown error');
+      const providerError = normalizeProviderError(error);
+      setTestError(providerError.actionHint
+        ? `${providerError.message} ${providerError.actionHint}`
+        : providerError.message);
     }
   };
 
@@ -322,7 +333,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
               type="text"
               value={settings.model}
               onChange={(e) => setSettings({ ...settings, model: e.target.value })}
-              placeholder="Leave empty for default"
+              placeholder={PROVIDER_DEFAULT_MODELS[settings.provider] || 'Leave empty for default'}
               style={{
                 width: '100%',
                 padding: '8px 12px',

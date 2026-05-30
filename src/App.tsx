@@ -5,12 +5,25 @@ import { PreviewPanel } from './components/Preview/PreviewPanel';
 import { ErrorBar } from './components/ErrorBar/ErrorBar';
 import { Toolbar } from './components/Toolbar/Toolbar';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { DevTestPanel } from './components/DevTools/DevTestPanel';
 import { useProjectStore } from './store/projectStore';
 import { useEditorStore } from './store/editorStore';
+import { useAIStore } from './store/aiStore';
 import { useUiStore } from './store/uiStore';
 import { usePanelResize } from './hooks/usePanelResize';
+import { aiService } from './ai/service';
+import { OpenAICompatibleProvider } from './ai/providers/openai-compatible';
 import { decodeShaderFromUrl } from './utils/shareUrl';
 import './App.css';
+
+function initDevProvider() {
+  const key = import.meta.env.VITE_DEEPSEEK_API_KEY;
+  if (!key || key === 'your_api_key_here') return;
+
+  const provider = OpenAICompatibleProvider.createPreset('deepseek', key);
+  aiService.setProvider(provider);
+  useAIStore.getState().setProvider('DeepSeek', 'deepseek-v4-pro');
+}
 
 function App() {
   const loadProjects = useProjectStore((s) => s.loadProjects);
@@ -23,15 +36,14 @@ function App() {
   const aiEditorResize = usePanelResize('ai', 'editor');
   const editorPreviewResize = usePanelResize('editor', 'preview');
 
-  // Load projects and check for shared URL on mount
+  // Load projects, check shared URL, auto-configure dev provider
   useEffect(() => {
     loadProjects();
+    initDevProvider();
 
-    // Check for shared shader in URL
     const sharedCode = decodeShaderFromUrl();
     if (sharedCode) {
       setCode(sharedCode);
-      // Clear the hash to avoid reloading on refresh
       window.location.hash = '';
     }
   }, [loadProjects, setCode]);
@@ -121,6 +133,7 @@ function App() {
           />
         </ErrorBoundary>
       </div>
+      {import.meta.env.DEV && <DevTestPanel />}
     </div>
   );
 }

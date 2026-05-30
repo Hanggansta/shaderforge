@@ -1,5 +1,6 @@
 import { useRef, useEffect, useCallback } from 'react';
 import Editor, { type OnMount, type OnChange } from '@monaco-editor/react';
+import type * as Monaco from 'monaco-editor';
 import { useEditorStore } from '../../store/editorStore';
 import { registerGLSLSnippets } from '../../editor/glslSnippets';
 import { setErrorMarkers, clearErrorMarkers } from '../../editor/errorMarkers';
@@ -108,8 +109,10 @@ const GLSL_THEME = {
 };
 
 export function MonacoEditor() {
-  const editorRef = useRef<any>(null);
-  const monacoRef = useRef<any>(null);
+  const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
+  const monacoRef = useRef<typeof Monaco | null>(null);
+  /** Guard to prevent handleChange from firing during programmatic setValue */
+  const settingValueRef = useRef(false);
   const code = useEditorStore((s) => s.code);
   const compileErrors = useEditorStore((s) => s.compileErrors);
   const compileStatus = useEditorStore((s) => s.compileStatus);
@@ -134,10 +137,10 @@ export function MonacoEditor() {
 
     // Register GLSL language
     monaco.languages.register({ id: 'glsl' });
-    monaco.languages.setMonarchTokensProvider('glsl', GLSL_LANGUAGE as any);
+    monaco.languages.setMonarchTokensProvider('glsl', GLSL_LANGUAGE as Monaco.languages.IMonarchLanguage);
 
     // Define theme
-    monaco.editor.defineTheme('shaderforge-dark', GLSL_THEME as any);
+    monaco.editor.defineTheme('shaderforge-dark', GLSL_THEME as Monaco.editor.IStandaloneThemeData);
     monaco.editor.setTheme('shaderforge-dark');
 
     // Set model language
@@ -160,7 +163,7 @@ export function MonacoEditor() {
   };
 
   const handleChange: OnChange = (value) => {
-    if (value !== undefined) {
+    if (value !== undefined && !settingValueRef.current) {
       setCode(value);
     }
   };
@@ -182,7 +185,9 @@ export function MonacoEditor() {
     if (editorRef.current) {
       const currentValue = editorRef.current.getValue();
       if (currentValue !== code) {
+        settingValueRef.current = true;
         editorRef.current.setValue(code);
+        settingValueRef.current = false;
       }
     }
   }, [code]);

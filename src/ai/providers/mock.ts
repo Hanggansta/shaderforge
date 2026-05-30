@@ -211,4 +211,24 @@ export class MockAIProvider implements AIProvider {
       model: 'mock-v1',
     };
   }
+
+  async chatCompletion(_messages: Array<{ role: string; content: string }>): Promise<string> {
+    await delay(500);
+
+    // Return a default ShaderSpec JSON for the mock provider
+    return JSON.stringify({
+      intent: 'create',
+      scene: { type: 'abstract', composition: 'fullscreen' },
+      style: { mood: 'dreamy', visualDensity: 0.5, contrast: 0.5, glow: 0.5 },
+      motion: { type: 'flow', speed: 0.5, smoothness: 0.5 },
+      color: { palette: 'purple_blue' },
+      constraints: {
+        target: 'webgl2',
+        performance: 'desktop_balanced',
+        maxIterations: 32,
+        allowRaymarching: false,
+        allowTextures: false,
+      },
+    });
+  }
 }

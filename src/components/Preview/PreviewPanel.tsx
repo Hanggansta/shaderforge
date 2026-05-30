@@ -1,82 +1,12 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { useEditorStore } from '../../store/editorStore';
 import { usePreviewStore } from '../../store/previewStore';
-
-// Vertex shader for fullscreen quad
-const VERTEX_SHADER = `#version 300 es
-in vec2 a_position;
-void main() {
-  gl_Position = vec4(a_position, 0.0, 1.0);
-}`;
-
-// Clean up common AI-generated issues
-function cleanShaderCode(code: string): string {
-  let cleaned = code;
-
-  // Remove #version directives (we add our own)
-  cleaned = cleaned.replace(/^\s*#version\s+\d+\s+\w+\s*;?\s*$/gm, '');
-
-  // Remove #ifdef GL_ES / #endif blocks
-  cleaned = cleaned.replace(/#ifdef\s+GL_ES[\s\S]*?#endif/g, '');
-
-  // Remove redundant precision declarations (we add our own)
-  cleaned = cleaned.replace(/^\s*precision\s+\w+\s+\w+\s*;\s*$/gm, '');
-
-  // Remove redundant uniform declarations (we add our own)
-  cleaned = cleaned.replace(/^\s*uniform\s+(float|int|vec[234]|mat[234])\s+i\w+\s*;\s*$/gm, '');
-
-  // Clean up multiple blank lines
-  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
-
-  return cleaned.trim();
-}
-
-// Wrapper for Shadertoy-style mainImage
-function wrapFragmentShader(userCode: string): string {
-  const cleaned = cleanShaderCode(userCode);
-
-  // Check if code already has mainImage
-  if (cleaned.includes('mainImage')) {
-    return `#version 300 es
-precision mediump float;
-
-// Auto-provided uniforms
-uniform float iTime;
-uniform float iTimeDelta;
-uniform int iFrame;
-uniform vec3 iResolution;
-uniform vec4 iMouse;
-uniform vec4 iDate;
-
-// User code
-${cleaned}
-
-// Auto-generated main function
-out vec4 fragColor;
-void main() {
-  mainImage(fragColor, gl_FragCoord.xy);
-}`;
-  }
-
-  // If code has main(), use it directly
-  if (cleaned.includes('void main()')) {
-    return `#version 300 es
-precision mediump float;
-
-// Auto-provided uniforms
-uniform float iTime;
-uniform float iTimeDelta;
-uniform int iFrame;
-uniform vec3 iResolution;
-uniform vec4 iMouse;
-uniform vec4 iDate;
-
-// User code
-${cleaned}`;
-  }
-
-  throw new Error('No mainImage() or main() function found');
-}
+import { useAIStore, type TelemetrySummary } from '../../store/aiStore';
+import { VERTEX_SHADER, wrapFragmentShader } from '../../services/shader/wrap-fragment-shader';
+import { parseShaderError } from '../../services/shader/parse-shader-error';
+import { aiService } from '../../ai/service';
+import { canApplyAutoRepair } from '../../ai/telemetry/auto-repair-safety';
+import { friendlyQualityLabel } from '../../ai/telemetry/quality-labels';
 
 export function PreviewPanel({ maximized, onToggleMaximize, style }: {
   maximized?: boolean;
@@ -94,12 +24,15 @@ export function PreviewPanel({ maximized, onToggleMaximize, style }: {
   const mouseRef = useRef({ x: 0, y: 0, clickX: 0, clickY: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [qualityLabel, setQualityLabel] = useState<string | null>(null);
+  const [qualitySeverity, setQualitySeverity] = useState<string>('low');
 
   const code = useEditorStore((s) => s.code);
   const compileStatus = useEditorStore((s) => s.compileStatus);
   const setCompileStatus = useEditorStore((s) => s.setCompileStatus);
   const setCompileErrors = useEditorStore((s) => s.setCompileErrors);
   const setLastValidCode = useEditorStore((s) => s.setLastValidCode);
+  const setCodeFromRepair = useEditorStore((s) => s.setCodeFromRepair);
 
   const isPlaying = usePreviewStore((s) => s.isPlaying);
   const fps = usePreviewStore((s) => s.fps);
@@ -108,7 +41,13 @@ export function PreviewPanel({ maximized, onToggleMaximize, style }: {
   const setFps = usePreviewStore((s) => s.setFps);
   const setCompileResult = usePreviewStore((s) => s.setCompileResult);
 
-  const fpsCounterRef = useRef({ frames: 0, lastTime: performance.now() / 1000 });
+  const fpsCounterRef = useRef({ frames: 0, lastTime: -1 });
+
+  // Telemetry tracking - capture once per AI-generated shader
+  const lastRequestId = useEditorStore((s) => s.lastRequestId);
+  const clearRequestId = useEditorStore((s) => s.clearRequestId);
+  const telemetryCapturedRef = useRef<string | null>(null);
+  const telemetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const compileShader = useCallback((gl: WebGL2RenderingContext, source: string, type: number): WebGLShader | null => {
     const shader = gl.createShader(type);
@@ -126,23 +65,25 @@ export function PreviewPanel({ maximized, onToggleMaximize, style }: {
     return shader;
   }, []);
 
-  const parseShaderError = useCallback((errorLog: string): { line: number; message: string }[] => {
-    const errors: { line: number; message: string }[] = [];
-    const lines = errorLog.split('\n');
+  const resizeCanvas = useCallback(() => {
+    const canvas = canvasRef.current;
+    const gl = glRef.current;
+    if (!canvas || !gl) return;
 
-    for (const line of lines) {
-      // Match patterns like "ERROR: 0:15: ..." or "0:15(1): ..."
-      const match = line.match(/(?:ERROR:\s*)?(\d+):(\d+)(?:\(\d+\))?:\s*(.*)/);
-      if (match) {
-        const lineNum = parseInt(match[2], 10);
-        // Adjust for wrapper offset (11 lines of header before user code)
-        const userLine = Math.max(1, lineNum - 11);
-        errors.push({ line: userLine, message: match[3].trim() });
-      }
-    }
+    const container = canvas.parentElement;
+    if (!container) return;
 
-    return errors;
-  }, []);
+    const dpr = window.devicePixelRatio || 1;
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+
+    setResolution(canvas.width, canvas.height);
+  }, [setResolution]);
 
   const initWebGL = useCallback(() => {
     const canvas = canvasRef.current;
@@ -183,7 +124,7 @@ export function PreviewPanel({ maximized, onToggleMaximize, style }: {
 
     // Set initial resolution
     resizeCanvas();
-  }, [compileShader]);
+  }, [compileShader, resizeCanvas]);
 
   const compileAndLink = useCallback((userCode: string) => {
     const gl = glRef.current;
@@ -220,7 +161,7 @@ export function PreviewPanel({ maximized, onToggleMaximize, style }: {
         const errors = parseShaderError(error);
         setCompileErrors(errors.map((e) => ({
           line: e.line,
-          column: 0,
+          column: e.column,
           message: e.message,
           source: 'fragment' as const,
         })));
@@ -259,7 +200,7 @@ export function PreviewPanel({ maximized, onToggleMaximize, style }: {
       const errors = parseShaderError(message);
       setCompileErrors(errors.map((e) => ({
         line: e.line,
-        column: 0,
+        column: e.column,
         message: e.message,
         source: 'fragment' as const,
       })));
@@ -267,7 +208,7 @@ export function PreviewPanel({ maximized, onToggleMaximize, style }: {
       setCompileResult('error');
       return false;
     }
-  }, [compileShader, parseShaderError, setCompileStatus, setCompileErrors, setCompileResult, setLastValidCode]);
+  }, [compileShader, setCompileStatus, setCompileErrors, setCompileResult, setLastValidCode]);
 
   const render = useCallback(() => {
     const gl = glRef.current;
@@ -282,7 +223,10 @@ export function PreviewPanel({ maximized, onToggleMaximize, style }: {
 
     // Update FPS counter (sample every 500ms)
     fpsCounterRef.current.frames++;
-    if (now - fpsCounterRef.current.lastTime >= 0.5) {
+    if (fpsCounterRef.current.lastTime < 0) {
+      // First frame — initialize timestamp
+      fpsCounterRef.current.lastTime = now;
+    } else if (now - fpsCounterRef.current.lastTime >= 0.5) {
       const fps = Math.round(fpsCounterRef.current.frames / (now - fpsCounterRef.current.lastTime));
       setFps(fps);
       fpsCounterRef.current.frames = 0;
@@ -319,7 +263,10 @@ export function PreviewPanel({ maximized, onToggleMaximize, style }: {
   }, [setFps]);
 
   const isPlayingRef = useRef(isPlaying);
-  isPlayingRef.current = isPlaying;
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
 
   const startRenderLoop = useCallback(() => {
     const loop = () => {
@@ -331,26 +278,6 @@ export function PreviewPanel({ maximized, onToggleMaximize, style }: {
     loop();
   }, [render]);
 
-  const resizeCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    const gl = glRef.current;
-    if (!canvas || !gl) return;
-
-    const container = canvas.parentElement;
-    if (!container) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    const width = container.clientWidth;
-    const height = container.clientHeight;
-
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
-
-    setResolution(canvas.width, canvas.height);
-  }, [setResolution]);
-
   // Initialize WebGL
   useEffect(() => {
     initWebGL();
@@ -359,6 +286,9 @@ export function PreviewPanel({ maximized, onToggleMaximize, style }: {
     return () => {
       if (animFrameRef.current) {
         cancelAnimationFrame(animFrameRef.current);
+      }
+      if (telemetryTimerRef.current) {
+        clearTimeout(telemetryTimerRef.current);
       }
     };
   }, [initWebGL, startRenderLoop]);
@@ -391,6 +321,142 @@ export function PreviewPanel({ maximized, onToggleMaximize, style }: {
 
     return () => clearTimeout(timer);
   }, [code, compileAndLink]);
+
+  // Telemetry: capture render quality after AI-generated shader compiles
+  useEffect(() => {
+    // Only run if we have a requestId (AI-generated) and haven't captured yet
+    if (!lastRequestId || telemetryCapturedRef.current === lastRequestId) {
+      return;
+    }
+
+    // Only capture after successful compilation
+    if (compileStatus !== 'success') {
+      return;
+    }
+
+    // Explicitly require codeSource === 'ai_generation'
+    // Skip manual edits AND quality_repair (prevent re-triggering)
+    const currentCodeSource = useEditorStore.getState().codeSource;
+    if (currentCodeSource !== 'ai_generation') {
+      if (import.meta.env.DEV) {
+        console.debug('[Telemetry] Skipped: codeSource is', currentCodeSource, '(need ai_generation)');
+      }
+      return;
+    }
+
+    // Mark as captured immediately to prevent re-entry
+    telemetryCapturedRef.current = lastRequestId;
+
+    // Capture snapshot of editor state at trigger time for stale-check later
+    const triggerRequestId = lastRequestId;
+    const triggerCode = useEditorStore.getState().code;
+
+    // Wait for shader to render a few frames before capturing
+    telemetryTimerRef.current = setTimeout(async () => {
+      const gl = glRef.current;
+      const canvas = canvasRef.current;
+
+      if (!gl || !canvas || gl.isContextLost()) {
+        clearRequestId();
+        return;
+      }
+
+      try {
+        const result = await aiService.captureRenderTelemetry(
+          gl,
+          canvas.width,
+          canvas.height,
+          triggerRequestId,
+          triggerCode
+        );
+
+        if (result?.success && result.diagnosis) {
+          const diag = result.diagnosis;
+          if (import.meta.env.DEV) {
+            console.debug('[Telemetry] Quality diagnosis:', diag.summary);
+            if (diag.issues.length > 0) {
+              console.debug('[Telemetry] Issues:', diag.issues);
+            }
+            if (result.repairPlan) {
+              console.debug('[Telemetry] Repair plan:', result.repairPlan.summary);
+            }
+          }
+
+          // Build quality label from signals or diagnosis
+          const primaryIssue = diag.issues[0];
+          const qualityLabel = diag.shouldRepair
+            ? (primaryIssue?.category || 'issues found')
+            : 'healthy';
+          const qualitySeverity = diag.severity || 'low';
+
+          // Prepare telemetry summary for chat display
+          const telemetrySummary: TelemetrySummary = {
+            qualityLabel,
+            qualitySeverity,
+            repairAttempted: !!result.autoRepair?.attempted,
+            repairSuccess: result.autoRepair?.success,
+            repairSummary: result.autoRepair?.attempted
+              ? (result.autoRepair.success ? 'improved' : 'could not improve')
+              : undefined,
+            metrics: result.metrics ? {
+              brightness: result.metrics.brightness,
+              contrast: result.metrics.contrast,
+              saturation: result.metrics.saturation,
+            } : undefined,
+          };
+
+          // Update the last assistant message with telemetry data
+          useAIStore.getState().updateLastAssistantMessage(telemetrySummary);
+
+          // Update preview header quality indicator
+          setQualityLabel(qualityLabel);
+          setQualitySeverity(qualitySeverity);
+
+          // Handle auto-repair result — verify editor state before applying
+          if (result.autoRepair?.attempted && result.autoRepair.success && result.autoRepair.code) {
+            // Re-read editor store to verify nothing changed during repair
+            const state = useEditorStore.getState();
+            const stateMatches = canApplyAutoRepair(
+              { requestId: triggerRequestId, code: triggerCode },
+              state
+            );
+
+            if (!stateMatches) {
+              if (import.meta.env.DEV) {
+                console.debug('[AutoRepair] Skipped applying: editor state changed during repair', {
+                  codeSource: state.codeSource,
+                  requestIdMatch: state.lastRequestId === triggerRequestId,
+                  codeMatch: state.code === triggerCode,
+                });
+              }
+            } else {
+              if (import.meta.env.DEV) {
+                console.debug('[AutoRepair] Applying repaired code');
+              }
+              setCodeFromRepair(result.autoRepair.code, triggerRequestId);
+            }
+          } else if (result.autoRepair?.attempted) {
+            if (import.meta.env.DEV) {
+              console.debug('[AutoRepair] Failed or skipped:', result.autoRepair.error);
+            }
+          }
+        }
+      } catch (err) {
+        if (import.meta.env.DEV) {
+          console.debug('[Telemetry] Capture failed:', err);
+        }
+      } finally {
+        clearRequestId();
+      }
+    }, 1500); // Wait 1.5s for shader to render ~90 frames at 60fps
+
+    return () => {
+      if (telemetryTimerRef.current) {
+        clearTimeout(telemetryTimerRef.current);
+        telemetryTimerRef.current = null;
+      }
+    };
+  }, [compileStatus, lastRequestId, clearRequestId, setCodeFromRepair]);
 
   // Handle mouse events
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -457,6 +523,17 @@ export function PreviewPanel({ maximized, onToggleMaximize, style }: {
           <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
             {compileStatus === 'compiling' ? 'Compiling...' : compileStatus}
           </span>
+          {qualityLabel && (
+            <span style={{
+              fontSize: 10,
+              padding: '1px 6px',
+              borderRadius: 8,
+              background: (qualitySeverity === 'high' ? '#f85149' : qualitySeverity === 'medium' ? '#d29922' : '#3fb950') + '20',
+              color: qualitySeverity === 'high' ? '#f85149' : qualitySeverity === 'medium' ? '#d29922' : '#3fb950',
+            }}>
+              {friendlyQualityLabel(qualityLabel)}
+            </span>
+          )}
           <button
             className="preview-btn"
             onClick={onToggleMaximize}

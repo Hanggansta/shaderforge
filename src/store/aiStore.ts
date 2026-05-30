@@ -1,13 +1,28 @@
 import { create } from 'zustand';
 import type { AIIntent } from '../ai/adapter';
 
+export interface TelemetrySummary {
+  qualityLabel: string;       // e.g. "healthy", "too dark", "low contrast"
+  qualitySeverity: string;    // "low", "medium", "high"
+  repairAttempted: boolean;
+  repairSuccess?: boolean;
+  repairSummary?: string;
+  metrics?: {
+    brightness: number;
+    contrast: number;
+    saturation: number;
+  };
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   code?: string;
   intent?: AIIntent;
+  detectedIntent?: AIIntent;  // For auto mode: the resolved intent
   timestamp: number;
+  telemetry?: TelemetrySummary;
 }
 
 export type AIRequestState = 'idle' | 'loading' | 'error' | 'cancelled';
@@ -22,6 +37,7 @@ interface AIState {
 
   // Actions
   addMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
+  updateLastAssistantMessage: (telemetry: TelemetrySummary) => void;
   setActiveIntent: (intent: AIIntent) => void;
   setRequestState: (state: AIRequestState) => void;
   setLastError: (error: string | null) => void;
@@ -39,7 +55,7 @@ export const useAIStore = create<AIState>((set) => ({
       timestamp: Date.now(),
     },
   ],
-  activeIntent: 'create',
+  activeIntent: 'auto',
   requestState: 'idle',
   lastError: null,
   providerName: 'Mock AI',
@@ -55,6 +71,17 @@ export const useAIStore = create<AIState>((set) => ({
       },
     ],
   })),
+
+  updateLastAssistantMessage: (telemetry) => set((state) => {
+    const messages = [...state.messages];
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'assistant') {
+        messages[i] = { ...messages[i], telemetry };
+        break;
+      }
+    }
+    return { messages };
+  }),
 
   setActiveIntent: (activeIntent) => set({ activeIntent }),
 
@@ -84,7 +111,7 @@ export const useAIStore = create<AIState>((set) => ({
         timestamp: Date.now(),
       },
     ],
-    activeIntent: 'create',
+    activeIntent: 'auto',
     requestState: 'idle',
     lastError: null,
   }),

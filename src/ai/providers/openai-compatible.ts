@@ -9,8 +9,8 @@ export interface OpenAICompatibleConfig {
 
 const DEFAULT_CONFIGS: Record<string, { baseUrl: string; model: string }> = {
   deepseek: {
-    baseUrl: 'https://api.deepseek.com/v1',
-    model: 'deepseek-chat',
+    baseUrl: 'https://api.deepseek.com',
+    model: 'deepseek-v4-pro',
   },
   openai: {
     baseUrl: 'https://api.openai.com/v1',
@@ -88,6 +88,10 @@ export class OpenAICompatibleProvider implements AIProvider {
 
     const data = await response.json();
     return data.choices[0]?.message?.content || '';
+  }
+
+  async chatCompletion(messages: Array<{ role: string; content: string }>): Promise<string> {
+    return this.callAPI(messages);
   }
 
   async generateShader(prompt: string, __context?: ShaderContext): Promise<AIResponse> {

@@ -3,11 +3,18 @@
  * Generate → Cleanup → Validate → Compile → Analyze → Fix → Retry
  */
 
-import type { AIProvider } from './adapter';
+import type { AIProvider, AIIntent } from './adapter';
 import { cleanShaderCode, extractGLSLFromResponse } from './clean-code';
 import { validateShaderCode, type ValidationIssue } from './validator';
 import { analyzeShaderErrors, formatErrorsForAI, isDefinePlacementError, getDefineFixInstructions, type AnalyzedError } from './error-analyzer';
-import { buildSystemPrompt, buildFixPrompt } from './conventions';
+import { buildSystemPrompt, buildSpecAwareSystemPrompt, buildFixPrompt } from './conventions';
+import type { ShaderSpec } from './spec/shader-spec';
+import type { TechniquePlan } from './planner/technique-plan';
+import type { GoldenShaderExample } from './library/golden-shader';
+import type { ModifyStrategy } from './modify/modify-strategy';
+import type { ModifyIntent } from './modify/modify-intent';
+import { selectFallbackShader } from './fallback/select-fallback-shader';
+import { compileShaderCandidate } from '../services/shader/shader-compiler';
 
 export type AgentStatus =
   | 'idle'
@@ -27,12 +34,6 @@ export interface AgentProgress {
   details?: string;
 }
 
-export interface CompileResult {
-  success: boolean;
-  errorLog?: string;
-  errors?: AnalyzedError[];
-}
-
 export interface AgentResult {
   code: string;
   success: boolean;
@@ -40,12 +41,22 @@ export interface AgentResult {
   errors?: AnalyzedError[];
   validationIssues?: ValidationIssue[];
   progress: AgentProgress[];
+  explanation?: string;       // For explain intent: the explanation text
+  detectedIntent?: AIIntent;  // For auto intent: the resolved intent
+  clarification?: string;     // For low-confidence auto intent: ask user to clarify
 }
 
 export interface AgentOptions {
   maxAttempts?: number;       // Default: 3
-  compileFn?: (code: string) => Promise<CompileResult>;  // Compile function
   onProgress?: (progress: AgentProgress) => void;
+  spec?: ShaderSpec;          // Optional ShaderSpec IR for spec-aware generation
+  techniquePlan?: TechniquePlan; // Optional deterministic technique plan
+  goldenExamples?: GoldenShaderExample[]; // Optional reference shaders
+  modifyStrategy?: ModifyStrategy; // Optional modify strategy for modify intent
+  modifyIntent?: ModifyIntent;   // Optional modify intent for modify intent
+  intent?: AIIntent;          // Intent for routing (modify uses modifyShader)
+  editorCode?: string;        // Current editor code (for modify intent)
+  disableFallback?: boolean;  // If true, never use fallback shader (e.g. auto-repair)
 }
 
 /**
@@ -58,8 +69,15 @@ export async function agentLoop(
 ): Promise<AgentResult> {
   const {
     maxAttempts = 3,
-    compileFn,
     onProgress,
+    spec,
+    techniquePlan,
+    goldenExamples,
+    modifyStrategy,
+    modifyIntent,
+    intent,
+    editorCode,
+    disableFallback = false,
   } = options;
 
   const progressLog: AgentProgress[] = [];
@@ -83,7 +101,7 @@ export async function agentLoop(
       // ===== STEP 1: Generate/Fix =====
       if (attempt === 1) {
         reportProgress('generating', 'Generating shader...', `Attempt ${attempt}/${maxAttempts}`);
-        currentCode = await generateCode(provider, userPrompt);
+        currentCode = await generateCode(provider, userPrompt, spec, techniquePlan, goldenExamples, modifyStrategy, modifyIntent, intent, editorCode);
       } else {
         reportProgress('fixing', `Fixing errors (attempt ${attempt}/${maxAttempts})...`, formatErrorsForAI(lastErrors));
         currentCode = await fixCode(provider, currentCode, lastErrors);
@@ -128,71 +146,90 @@ export async function agentLoop(
         };
       }
 
-      // ===== STEP 4: Compile =====
-      if (compileFn) {
-        reportProgress('compiling', 'Compiling shader...');
-        const compileResult = await compileFn(currentCode);
+      // ===== STEP 4: Compile (direct, no store polling) =====
+      reportProgress('compiling', 'Compiling shader...');
+      const compileResult = compileShaderCandidate(currentCode);
 
-        if (compileResult.success) {
-          reportProgress('success', 'Shader compiled successfully!');
-          return {
-            code: currentCode,
-            success: true,
-            attempts: attempt,
-            progress: progressLog,
-          };
-        }
+      if (compileResult.success) {
+        reportProgress('success', 'Shader compiled successfully!');
+        return {
+          code: currentCode,
+          success: true,
+          attempts: attempt,
+          progress: progressLog,
+        };
+      }
 
-        // ===== STEP 5: Analyze Errors =====
-        if (compileResult.errorLog) {
-          const analysis = analyzeShaderErrors(compileResult.errorLog);
-          lastErrors = analysis.errors;
+      // ===== STEP 5: Analyze Errors =====
+      if (compileResult.errorLog) {
+        const analysis = analyzeShaderErrors(compileResult.errorLog);
+        lastErrors = analysis.errors;
 
-          // Add specific instructions for #define placement errors
-          if (isDefinePlacementError(analysis.errors)) {
-            const defineInstructions = getDefineFixInstructions(analysis.errors);
-            reportProgress('compiling', `Compilation failed: ${analysis.summary}`, defineInstructions);
-            // Enhance the last error with the define instructions
-            if (lastErrors.length > 0) {
-              lastErrors[lastErrors.length - 1].fixDirection += '\n' + defineInstructions;
-            }
-          } else {
-            reportProgress('compiling', `Compilation failed: ${analysis.summary}`);
+        // Add specific instructions for #define placement errors
+        if (isDefinePlacementError(analysis.errors)) {
+          const defineInstructions = getDefineFixInstructions(analysis.errors);
+          reportProgress('compiling', `Compilation failed: ${analysis.summary}`, defineInstructions);
+          if (lastErrors.length > 0) {
+            lastErrors[lastErrors.length - 1].fixDirection += '\n' + defineInstructions;
           }
         } else {
-          reportProgress('compiling', 'Compilation failed with unknown error');
-          lastErrors = [];
+          reportProgress('compiling', `Compilation failed: ${analysis.summary}`);
         }
+      } else {
+        reportProgress('compiling', 'Compilation failed with unknown error');
+        lastErrors = [];
+      }
 
-        // If last attempt, return with errors
-        if (attempt >= maxAttempts) {
+      // If last attempt, return with errors
+      if (attempt >= maxAttempts) {
+        // Use fallback shader if spec and plan are available (and fallback not disabled)
+        if (!disableFallback && spec && techniquePlan) {
+          const fallback = selectFallbackShader(spec, techniquePlan);
+          reportProgress('failed', 'Using fallback shader', `Original generation failed after ${attempt} attempts`);
           return {
-            code: currentCode,
+            code: fallback.code,
             success: false,
             attempts: attempt,
             errors: lastErrors,
             progress: progressLog,
           };
         }
-
-        // Continue to next attempt
-        continue;
+        return {
+          code: currentCode,
+          success: false,
+          attempts: attempt,
+          errors: lastErrors,
+          progress: progressLog,
+        };
       }
 
-      // No compile function - return code as-is
-      reportProgress('success', 'Code generated (no compilation test)');
-      return {
-        code: currentCode,
-        success: true,
-        attempts: attempt,
-        progress: progressLog,
-      };
+      // Continue to next attempt
+      continue;
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       reportProgress('failed', `Error: ${errorMessage}`);
 
       if (attempt >= maxAttempts) {
+        // Use fallback shader if spec and plan are available (and fallback not disabled)
+        if (!disableFallback && spec && techniquePlan) {
+          const fallback = selectFallbackShader(spec, techniquePlan);
+          reportProgress('failed', 'Using fallback shader', `API error after ${attempt} attempts`);
+          return {
+            code: fallback.code,
+            success: false,
+            attempts: attempt,
+            errors: [{
+              line: 0,
+              column: 0,
+              rawMessage: errorMessage,
+              errorType: 'api_error',
+              possibleCause: 'AI API call failed',
+              fixDirection: 'Check API key and network connection',
+            }],
+            progress: progressLog,
+          };
+        }
         return {
           code: currentCode,
           success: false,
@@ -212,6 +249,17 @@ export async function agentLoop(
   }
 
   // Should not reach here, but just in case
+  // Use fallback shader if spec and plan are available (and fallback not disabled)
+  if (!disableFallback && spec && techniquePlan) {
+    const fallback = selectFallbackShader(spec, techniquePlan);
+    return {
+      code: fallback.code,
+      success: false,
+      attempts: maxAttempts,
+      errors: lastErrors,
+      progress: progressLog,
+    };
+  }
   return {
     code: currentCode,
     success: false,
@@ -224,14 +272,28 @@ export async function agentLoop(
 /**
  * Generate initial code from AI
  */
-async function generateCode(provider: AIProvider, userPrompt: string): Promise<string> {
-  const systemPrompt = buildSystemPrompt();
+async function generateCode(
+  provider: AIProvider,
+  userPrompt: string,
+  spec?: ShaderSpec,
+  techniquePlan?: TechniquePlan,
+  goldenExamples?: GoldenShaderExample[],
+  modifyStrategy?: ModifyStrategy,
+  modifyIntent?: ModifyIntent,
+  intent?: AIIntent,
+  editorCode?: string,
+): Promise<string> {
+  const systemPrompt = spec ? buildSpecAwareSystemPrompt(spec, techniquePlan, goldenExamples, modifyStrategy, modifyIntent) : buildSystemPrompt();
   const fullPrompt = `${systemPrompt}\n\nUSER REQUEST:\n${userPrompt}`;
 
-  const response = await provider.generateShader(fullPrompt);
-  const code = response.code || '';
+  let response;
+  if (intent === 'modify' && editorCode) {
+    response = await provider.modifyShader(fullPrompt, editorCode);
+  } else {
+    response = await provider.generateShader(fullPrompt);
+  }
 
-  // Try to extract GLSL if response includes prose
+  const code = response.code || '';
   const extracted = extractGLSLFromResponse(code);
   return extracted || code;
 }
@@ -251,7 +313,6 @@ async function fixCode(
   const response = await provider.fixShader(code, fullPrompt);
   const fixedCode = response.code || '';
 
-  // Try to extract GLSL if response includes prose
   const extracted = extractGLSLFromResponse(fixedCode);
   return extracted || fixedCode;
 }

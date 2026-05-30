@@ -1,4 +1,4 @@
-export function debounce<T extends (...args: any[]) => any>(
+export function debounce<T extends (...args: never[]) => unknown>(
   fn: T,
   delay: number
 ): (...args: Parameters<T>) => void {
@@ -16,7 +16,7 @@ export function debounce<T extends (...args: any[]) => any>(
   };
 }
 
-export function debounceWithStatus<T extends (...args: any[]) => any>(
+export function debounceWithStatus<T extends (...args: never[]) => unknown>(
   fn: T,
   delay: number,
   onStart: () => void,

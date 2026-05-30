@@ -14,16 +14,19 @@ export interface ShaderProject {
 const STORAGE_KEY = 'shaderforge-projects';
 const PROJECT_VERSION = 1;
 
+function isShaderProject(v: unknown): v is ShaderProject {
+  return typeof v === 'object' && v !== null && 'id' in v && 'name' in v && 'code' in v;
+}
+
 function loadProjects(): ShaderProject[] {
   try {
     const data = localStorage.getItem(STORAGE_KEY);
     if (!data) return [];
-    const parsed = JSON.parse(data);
+    const parsed: unknown = JSON.parse(data);
     if (!Array.isArray(parsed)) return [];
-    return parsed.map((p: any) => ({
-      ...p,
-      version: p.version || PROJECT_VERSION,
-    }));
+    return parsed
+      .filter(isShaderProject)
+      .map((p) => ({ ...p, version: p.version || PROJECT_VERSION }));
   } catch {
     return [];
   }

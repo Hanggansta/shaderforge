@@ -1,4 +1,4 @@
-export type AIIntent = 'create' | 'modify' | 'fix' | 'explain' | 'optimize';
+export type AIIntent = 'auto' | 'create' | 'modify' | 'fix' | 'explain' | 'optimize';
 
 export interface ShaderContext {
   currentCode?: string;
@@ -25,6 +25,7 @@ export interface AIProvider {
   modifyShader: (prompt: string, currentCode: string, context?: ShaderContext) => Promise<AIResponse>;
   fixShader: (currentCode: string, errorOutput: string, context?: ShaderContext) => Promise<AIResponse>;
   explainShader: (currentCode: string, context?: ShaderContext) => Promise<AIResponse>;
+  chatCompletion: (messages: Array<{ role: string; content: string }>) => Promise<string>;
 }
 
 export function extractGLSLFromResponse(response: string): string | null {

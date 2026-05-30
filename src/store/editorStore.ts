@@ -2,6 +2,8 @@ import { create } from 'zustand';
 
 export type CompileStatus = 'idle' | 'queued' | 'compiling' | 'success' | 'error';
 
+export type CodeSource = 'ai_generation' | 'quality_repair' | 'manual';
+
 export interface ShaderError {
   line: number;
   column: number;
@@ -15,13 +17,20 @@ interface EditorState {
   compileErrors: ShaderError[];
   isDirty: boolean;
   lastValidCode: string | null;
+  /** Request ID from last AI generation - used to track AI-generated code for telemetry */
+  lastRequestId: string | null;
+  /** Source of the current code - tracks provenance for auto-repair safety */
+  codeSource: CodeSource;
 
   // Actions
   setCode: (code: string) => void;
+  setCodeFromAI: (code: string, requestId: string) => void;
+  setCodeFromRepair: (code: string, requestId: string) => void;
   setCompileStatus: (status: CompileStatus) => void;
   setCompileErrors: (errors: ShaderError[]) => void;
   markDirty: (dirty: boolean) => void;
   setLastValidCode: (code: string | null) => void;
+  clearRequestId: () => void;
   reset: () => void;
 }
 
@@ -51,17 +60,24 @@ export const useEditorStore = create<EditorState>((set) => ({
   compileErrors: [],
   isDirty: false,
   lastValidCode: null,
+  lastRequestId: null,
+  codeSource: 'manual',
 
-  setCode: (code) => set({ code, isDirty: true }),
+  setCode: (code) => set({ code, isDirty: true, lastRequestId: null, codeSource: 'manual' }),
+  setCodeFromAI: (code, requestId) => set({ code, isDirty: true, lastRequestId: requestId, codeSource: 'ai_generation' }),
+  setCodeFromRepair: (code, requestId) => set({ code, isDirty: true, lastRequestId: requestId, codeSource: 'quality_repair' }),
   setCompileStatus: (compileStatus) => set({ compileStatus }),
   setCompileErrors: (compileErrors) => set({ compileErrors }),
   markDirty: (isDirty) => set({ isDirty }),
   setLastValidCode: (lastValidCode) => set({ lastValidCode }),
+  clearRequestId: () => set({ lastRequestId: null }),
   reset: () => set({
     code: DEFAULT_CODE,
     compileStatus: 'idle',
     compileErrors: [],
     isDirty: false,
     lastValidCode: null,
+    lastRequestId: null,
+    codeSource: 'manual',
   }),
 }));
