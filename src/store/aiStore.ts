@@ -1,5 +1,30 @@
 import { create } from 'zustand';
-import type { AIIntent } from '../ai/adapter';
+import type { AIIntent } from '../shader-agent/integration/types/ai-provider';
+
+const CANDIDATE_COUNT_KEY = 'shaderforge-ai-candidate-count';
+const DEFAULT_CANDIDATE_COUNT = 1;
+const MIN_CANDIDATE_COUNT = 1;
+const MAX_CANDIDATE_COUNT = 3;
+
+function loadCandidateCount(): number {
+  try {
+    const stored = localStorage.getItem(CANDIDATE_COUNT_KEY);
+    if (!stored) return DEFAULT_CANDIDATE_COUNT;
+    const parsed = Number.parseInt(stored, 10);
+    if (Number.isNaN(parsed)) return DEFAULT_CANDIDATE_COUNT;
+    return Math.min(MAX_CANDIDATE_COUNT, Math.max(MIN_CANDIDATE_COUNT, parsed));
+  } catch {
+    return DEFAULT_CANDIDATE_COUNT;
+  }
+}
+
+function persistCandidateCount(count: number): void {
+  try {
+    localStorage.setItem(CANDIDATE_COUNT_KEY, String(count));
+  } catch {
+    // ignore quota / disabled storage
+  }
+}
 
 export interface TelemetrySummary {
   qualityLabel: string;       // e.g. "healthy", "too dark", "low contrast"
@@ -14,6 +39,21 @@ export interface TelemetrySummary {
   };
 }
 
+export interface GenerationSummary {
+  sceneType: string;
+  mood: string;
+  palette: string;
+  baseTechnique: string;
+  motionType: string;
+  goldenExampleCount: number;
+  attempts: number;
+  candidateCount?: number;
+  /** 0-100 visual quality score for the chosen candidate, when evaluated. */
+  visualScore?: number;
+  /** Short label of the weakest visual metric (e.g. "brightness too dark"). */
+  visualWeakest?: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -23,6 +63,7 @@ export interface ChatMessage {
   detectedIntent?: AIIntent;  // For auto mode: the resolved intent
   timestamp: number;
   telemetry?: TelemetrySummary;
+  generationSummary?: GenerationSummary;
 }
 
 export type AIRequestState = 'idle' | 'loading' | 'error' | 'cancelled';
@@ -34,6 +75,12 @@ interface AIState {
   lastError: string | null;
   providerName: string;
   modelName: string;
+  /**
+   * Number of shader candidates to generate in parallel and rank by visual
+   * quality. 1 = single-shot (cheapest). 2-3 trades API cost for better
+   * visual results because the visual scorer can pick the best one.
+   */
+  candidateCount: number;
 
   // Actions
   addMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
@@ -42,6 +89,7 @@ interface AIState {
   setRequestState: (state: AIRequestState) => void;
   setLastError: (error: string | null) => void;
   setProvider: (name: string, model: string) => void;
+  setCandidateCount: (count: number) => void;
   clearMessages: () => void;
   reset: () => void;
 }
@@ -60,6 +108,7 @@ export const useAIStore = create<AIState>((set) => ({
   lastError: null,
   providerName: 'Mock AI',
   modelName: 'mock-v1',
+  candidateCount: loadCandidateCount(),
 
   addMessage: (message) => set((state) => ({
     messages: [
@@ -90,6 +139,12 @@ export const useAIStore = create<AIState>((set) => ({
   setLastError: (lastError) => set({ lastError }),
 
   setProvider: (providerName, modelName) => set({ providerName, modelName }),
+
+  setCandidateCount: (count) => {
+    const clamped = Math.min(3, Math.max(1, Math.floor(count)));
+    persistCandidateCount(clamped);
+    set({ candidateCount: clamped });
+  },
 
   clearMessages: () => set({
     messages: [

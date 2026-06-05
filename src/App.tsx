@@ -5,24 +5,65 @@ import { PreviewPanel } from './components/Preview/PreviewPanel';
 import { ErrorBar } from './components/ErrorBar/ErrorBar';
 import { Toolbar } from './components/Toolbar/Toolbar';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { DevTestPanel } from './components/DevTools/DevTestPanel';
 import { useProjectStore } from './store/projectStore';
 import { useEditorStore } from './store/editorStore';
 import { useAIStore } from './store/aiStore';
 import { useUiStore } from './store/uiStore';
 import { usePanelResize } from './hooks/usePanelResize';
-import { aiService } from './ai/service';
-import { OpenAICompatibleProvider } from './ai/providers/openai-compatible';
+import { shaderAgent } from './shader-agent/integration/service';
+import { OpenAICompatibleProvider } from './shader-agent/integration/providers/openai-compatible';
+import { MockAIProvider } from './shader-agent/integration/providers/mock';
 import { decodeShaderFromUrl } from './utils/shareUrl';
 import './App.css';
 
-function initDevProvider() {
-  const key = import.meta.env.VITE_DEEPSEEK_API_KEY;
-  if (!key || key === 'your_api_key_here') return;
+const SETTINGS_KEY = 'shaderforge-ai-settings';
 
-  const provider = OpenAICompatibleProvider.createPreset('deepseek', key);
-  aiService.setProvider(provider);
-  useAIStore.getState().setProvider('DeepSeek', 'deepseek-v4-pro');
+/**
+ * Restore saved AI provider from localStorage.
+ * Falls back to dev provider (DeepSeek) only if no saved settings exist.
+ * If neither exists, the default Mock AI stays active.
+ */
+function restoreSavedProvider() {
+  try {
+    const data = localStorage.getItem(SETTINGS_KEY);
+    if (data) {
+      const settings = JSON.parse(data);
+      if (settings.provider === 'mock') {
+        shaderAgent.setProvider(new MockAIProvider());
+        useAIStore.getState().setProvider('Mock AI', 'mock-v1');
+      } else if (settings.provider && settings.apiKey) {
+        const provider = settings.provider === 'custom'
+          ? new OpenAICompatibleProvider('custom', {
+              apiKey: settings.apiKey,
+              baseUrl: settings.baseUrl,
+              model: settings.model,
+            })
+          : OpenAICompatibleProvider.createPreset(settings.provider, settings.apiKey);
+        shaderAgent.setProvider(provider);
+        useAIStore.getState().setProvider(settings.provider, settings.model || 'default');
+      }
+      return true;
+    }
+  } catch { /* ignore parse errors */ }
+
+  // No saved settings — try OpenAI as default, then DeepSeek as fallback
+  const openaiKey = import.meta.env.VITE_OPENAI_API_KEY;
+  if (openaiKey && openaiKey !== 'your_openai_api_key_here') {
+    const provider = OpenAICompatibleProvider.createPreset('openai', openaiKey);
+    shaderAgent.setProvider(provider);
+    useAIStore.getState().setProvider('OpenAI', 'gpt-4o-mini');
+    return true;
+  }
+
+  const deepseekKey = import.meta.env.VITE_DEEPSEEK_API_KEY;
+  if (deepseekKey && deepseekKey !== 'your_api_key_here') {
+    const provider = OpenAICompatibleProvider.createPreset('deepseek', deepseekKey);
+    shaderAgent.setProvider(provider);
+    useAIStore.getState().setProvider('DeepSeek', 'deepseek-v4-pro');
+    return true;
+  }
+
+  return false;
 }
 
 function App() {
@@ -39,7 +80,7 @@ function App() {
   // Load projects, check shared URL, auto-configure dev provider
   useEffect(() => {
     loadProjects();
-    initDevProvider();
+    restoreSavedProvider();
 
     const sharedCode = decodeShaderFromUrl();
     if (sharedCode) {
@@ -133,7 +174,7 @@ function App() {
           />
         </ErrorBoundary>
       </div>
-      {import.meta.env.DEV && <DevTestPanel />}
+      {import.meta.env.DEV && null}
     </div>
   );
 }

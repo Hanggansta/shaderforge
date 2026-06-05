@@ -1,12 +1,8 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { useEditorStore } from '../../store/editorStore';
 import { usePreviewStore } from '../../store/previewStore';
-import { useAIStore, type TelemetrySummary } from '../../store/aiStore';
 import { VERTEX_SHADER, wrapFragmentShader } from '../../services/shader/wrap-fragment-shader';
 import { parseShaderError } from '../../services/shader/parse-shader-error';
-import { aiService } from '../../ai/service';
-import { canApplyAutoRepair } from '../../ai/telemetry/auto-repair-safety';
-import { friendlyQualityLabel } from '../../ai/telemetry/quality-labels';
 
 export function PreviewPanel({ maximized, onToggleMaximize, style }: {
   maximized?: boolean;
@@ -23,16 +19,26 @@ export function PreviewPanel({ maximized, onToggleMaximize, style }: {
   const frameRef = useRef<number>(0);
   const mouseRef = useRef({ x: 0, y: 0, clickX: 0, clickY: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
+  const uniformsRef = useRef<{
+    program: WebGLProgram;
+    iTime: WebGLUniformLocation | null;
+    iTimeDelta: WebGLUniformLocation | null;
+    iFrame: WebGLUniformLocation | null;
+    iResolution: WebGLUniformLocation | null;
+    iMouse: WebGLUniformLocation | null;
+    iDate: WebGLUniformLocation | null;
+  } | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [qualityLabel, setQualityLabel] = useState<string | null>(null);
-  const [qualitySeverity, setQualitySeverity] = useState<string>('low');
+  const [contextLost, setContextLost] = useState(false);
+  const [autoPaused, setAutoPaused] = useState(false);
+  const slowFrameCountRef = useRef(0);
 
   const code = useEditorStore((s) => s.code);
   const compileStatus = useEditorStore((s) => s.compileStatus);
+  const codeSource = useEditorStore((s) => s.codeSource);
   const setCompileStatus = useEditorStore((s) => s.setCompileStatus);
   const setCompileErrors = useEditorStore((s) => s.setCompileErrors);
   const setLastValidCode = useEditorStore((s) => s.setLastValidCode);
-  const setCodeFromRepair = useEditorStore((s) => s.setCodeFromRepair);
 
   const isPlaying = usePreviewStore((s) => s.isPlaying);
   const fps = usePreviewStore((s) => s.fps);
@@ -43,11 +49,7 @@ export function PreviewPanel({ maximized, onToggleMaximize, style }: {
 
   const fpsCounterRef = useRef({ frames: 0, lastTime: -1 });
 
-  // Telemetry tracking - capture once per AI-generated shader
-  const lastRequestId = useEditorStore((s) => s.lastRequestId);
-  const clearRequestId = useEditorStore((s) => s.clearRequestId);
-  const telemetryCapturedRef = useRef<string | null>(null);
-  const telemetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Telemetry tracking - removed in V1 simplification
 
   const compileShader = useCallback((gl: WebGL2RenderingContext, source: string, type: number): WebGLShader | null => {
     const shader = gl.createShader(type);
@@ -92,6 +94,7 @@ export function PreviewPanel({ maximized, onToggleMaximize, style }: {
     const gl = canvas.getContext('webgl2', {
       antialias: true,
       preserveDrawingBuffer: true,
+      powerPreference: 'high-performance',
     });
 
     if (!gl) {
@@ -100,6 +103,23 @@ export function PreviewPanel({ maximized, onToggleMaximize, style }: {
     }
 
     glRef.current = gl;
+
+    // Handle WebGL context loss/restoration
+    canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault(); // Signal that we want to handle restoration
+      setContextLost(true);
+      if (animFrameRef.current) {
+        cancelAnimationFrame(animFrameRef.current);
+        animFrameRef.current = 0;
+      }
+    });
+
+    canvas.addEventListener('webglcontextrestored', () => {
+      setContextLost(false);
+      // Re-initialize WebGL state by reloading the page
+      // (recursive initWebGL call causes lint issues)
+      window.location.reload();
+    });
 
     // Create fullscreen quad
     const positions = new Float32Array([
@@ -233,34 +253,55 @@ export function PreviewPanel({ maximized, onToggleMaximize, style }: {
       fpsCounterRef.current.lastTime = now;
     }
 
-    // Set uniforms
+    // Set uniforms (cache locations to avoid re-querying every frame)
     gl.useProgram(program);
 
-    const iTimeLoc = gl.getUniformLocation(program, 'iTime');
-    const iTimeDeltaLoc = gl.getUniformLocation(program, 'iTimeDelta');
-    const iFrameLoc = gl.getUniformLocation(program, 'iFrame');
-    const iResolutionLoc = gl.getUniformLocation(program, 'iResolution');
-    const iMouseLoc = gl.getUniformLocation(program, 'iMouse');
-    const iDateLoc = gl.getUniformLocation(program, 'iDate');
+    if (!uniformsRef.current || uniformsRef.current.program !== program) {
+      uniformsRef.current = {
+        program,
+        iTime: gl.getUniformLocation(program, 'iTime'),
+        iTimeDelta: gl.getUniformLocation(program, 'iTimeDelta'),
+        iFrame: gl.getUniformLocation(program, 'iFrame'),
+        iResolution: gl.getUniformLocation(program, 'iResolution'),
+        iMouse: gl.getUniformLocation(program, 'iMouse'),
+        iDate: gl.getUniformLocation(program, 'iDate'),
+      };
+    }
+    const u = uniformsRef.current;
 
-    if (iTimeLoc) gl.uniform1f(iTimeLoc, time);
-    if (iTimeDeltaLoc) gl.uniform1f(iTimeDeltaLoc, deltaTime);
-    if (iFrameLoc) gl.uniform1i(iFrameLoc, frameRef.current);
-    if (iResolutionLoc) {
-      gl.uniform3f(iResolutionLoc, gl.canvas.width, gl.canvas.height, 1.0);
+    if (u.iTime) gl.uniform1f(u.iTime, time);
+    if (u.iTimeDelta) gl.uniform1f(u.iTimeDelta, deltaTime);
+    if (u.iFrame) gl.uniform1i(u.iFrame, frameRef.current);
+    if (u.iResolution) {
+      gl.uniform3f(u.iResolution, gl.canvas.width, gl.canvas.height, 1.0);
     }
-    if (iMouseLoc) {
-      gl.uniform4f(iMouseLoc, mouseRef.current.x, mouseRef.current.y, mouseRef.current.clickX, mouseRef.current.clickY);
+    if (u.iMouse) {
+      gl.uniform4f(u.iMouse, mouseRef.current.x, mouseRef.current.y, mouseRef.current.clickX, mouseRef.current.clickY);
     }
-    if (iDateLoc) {
+    if (u.iDate) {
       const date = new Date();
-      gl.uniform4f(iDateLoc, date.getFullYear(), date.getMonth(), date.getDate(), date.getSeconds() + date.getMilliseconds() / 1000);
+      gl.uniform4f(u.iDate, date.getFullYear(), date.getMonth(), date.getDate(), date.getSeconds() + date.getMilliseconds() / 1000);
     }
 
     // Draw
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    const drawStart = performance.now();
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-  }, [setFps]);
+    const drawTime = performance.now() - drawStart;
+
+    // Frame time watchdog: auto-pause if shader is too heavy
+    if (drawTime > 100) { // > 100ms per frame = < 10 FPS
+      slowFrameCountRef.current++;
+      if (slowFrameCountRef.current >= 3) {
+        // Shader has been running slowly for 3+ consecutive frames (~300ms total)
+        setAutoPaused(true);
+        setPlaying(false);
+        slowFrameCountRef.current = 0;
+      }
+    } else {
+      slowFrameCountRef.current = 0;
+    }
+  }, [setFps, setPlaying]);
 
   const isPlayingRef = useRef(isPlaying);
 
@@ -286,9 +327,6 @@ export function PreviewPanel({ maximized, onToggleMaximize, style }: {
     return () => {
       if (animFrameRef.current) {
         cancelAnimationFrame(animFrameRef.current);
-      }
-      if (telemetryTimerRef.current) {
-        clearTimeout(telemetryTimerRef.current);
       }
     };
   }, [initWebGL, startRenderLoop]);
@@ -322,141 +360,10 @@ export function PreviewPanel({ maximized, onToggleMaximize, style }: {
     return () => clearTimeout(timer);
   }, [code, compileAndLink]);
 
-  // Telemetry: capture render quality after AI-generated shader compiles
-  useEffect(() => {
-    // Only run if we have a requestId (AI-generated) and haven't captured yet
-    if (!lastRequestId || telemetryCapturedRef.current === lastRequestId) {
-      return;
-    }
-
-    // Only capture after successful compilation
-    if (compileStatus !== 'success') {
-      return;
-    }
-
-    // Explicitly require codeSource === 'ai_generation'
-    // Skip manual edits AND quality_repair (prevent re-triggering)
-    const currentCodeSource = useEditorStore.getState().codeSource;
-    if (currentCodeSource !== 'ai_generation') {
-      if (import.meta.env.DEV) {
-        console.debug('[Telemetry] Skipped: codeSource is', currentCodeSource, '(need ai_generation)');
-      }
-      return;
-    }
-
-    // Mark as captured immediately to prevent re-entry
-    telemetryCapturedRef.current = lastRequestId;
-
-    // Capture snapshot of editor state at trigger time for stale-check later
-    const triggerRequestId = lastRequestId;
-    const triggerCode = useEditorStore.getState().code;
-
-    // Wait for shader to render a few frames before capturing
-    telemetryTimerRef.current = setTimeout(async () => {
-      const gl = glRef.current;
-      const canvas = canvasRef.current;
-
-      if (!gl || !canvas || gl.isContextLost()) {
-        clearRequestId();
-        return;
-      }
-
-      try {
-        const result = await aiService.captureRenderTelemetry(
-          gl,
-          canvas.width,
-          canvas.height,
-          triggerRequestId,
-          triggerCode
-        );
-
-        if (result?.success && result.diagnosis) {
-          const diag = result.diagnosis;
-          if (import.meta.env.DEV) {
-            console.debug('[Telemetry] Quality diagnosis:', diag.summary);
-            if (diag.issues.length > 0) {
-              console.debug('[Telemetry] Issues:', diag.issues);
-            }
-            if (result.repairPlan) {
-              console.debug('[Telemetry] Repair plan:', result.repairPlan.summary);
-            }
-          }
-
-          // Build quality label from signals or diagnosis
-          const primaryIssue = diag.issues[0];
-          const qualityLabel = diag.shouldRepair
-            ? (primaryIssue?.category || 'issues found')
-            : 'healthy';
-          const qualitySeverity = diag.severity || 'low';
-
-          // Prepare telemetry summary for chat display
-          const telemetrySummary: TelemetrySummary = {
-            qualityLabel,
-            qualitySeverity,
-            repairAttempted: !!result.autoRepair?.attempted,
-            repairSuccess: result.autoRepair?.success,
-            repairSummary: result.autoRepair?.attempted
-              ? (result.autoRepair.success ? 'improved' : 'could not improve')
-              : undefined,
-            metrics: result.metrics ? {
-              brightness: result.metrics.brightness,
-              contrast: result.metrics.contrast,
-              saturation: result.metrics.saturation,
-            } : undefined,
-          };
-
-          // Update the last assistant message with telemetry data
-          useAIStore.getState().updateLastAssistantMessage(telemetrySummary);
-
-          // Update preview header quality indicator
-          setQualityLabel(qualityLabel);
-          setQualitySeverity(qualitySeverity);
-
-          // Handle auto-repair result — verify editor state before applying
-          if (result.autoRepair?.attempted && result.autoRepair.success && result.autoRepair.code) {
-            // Re-read editor store to verify nothing changed during repair
-            const state = useEditorStore.getState();
-            const stateMatches = canApplyAutoRepair(
-              { requestId: triggerRequestId, code: triggerCode },
-              state
-            );
-
-            if (!stateMatches) {
-              if (import.meta.env.DEV) {
-                console.debug('[AutoRepair] Skipped applying: editor state changed during repair', {
-                  codeSource: state.codeSource,
-                  requestIdMatch: state.lastRequestId === triggerRequestId,
-                  codeMatch: state.code === triggerCode,
-                });
-              }
-            } else {
-              if (import.meta.env.DEV) {
-                console.debug('[AutoRepair] Applying repaired code');
-              }
-              setCodeFromRepair(result.autoRepair.code, triggerRequestId);
-            }
-          } else if (result.autoRepair?.attempted) {
-            if (import.meta.env.DEV) {
-              console.debug('[AutoRepair] Failed or skipped:', result.autoRepair.error);
-            }
-          }
-        }
-      } catch (err) {
-        if (import.meta.env.DEV) {
-          console.debug('[Telemetry] Capture failed:', err);
-        }
-      } finally {
-        clearRequestId();
-      }
-    }, 1500); // Wait 1.5s for shader to render ~90 frames at 60fps
-
-    return () => {
-      if (telemetryTimerRef.current) {
-        clearTimeout(telemetryTimerRef.current);
-        telemetryTimerRef.current = null;
-      }
-    };
-  }, [compileStatus, lastRequestId, clearRequestId, setCodeFromRepair]);
+  // Telemetry/auto-repair removed in V1 simplification. Quality signal
+  // (brightness/contrast/saturation) is captured in-process by the
+  // candidate-eval path inside the agent loop. The preview panel only
+  // needs to render.
 
   // Handle mouse events
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -491,6 +398,17 @@ export function PreviewPanel({ maximized, onToggleMaximize, style }: {
     }
   }, [resizeCanvas]);
 
+  const handleSnapshot = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || compileStatus !== 'success') return;
+
+    const dataUrl = canvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = `shader-${Date.now()}.png`;
+    a.click();
+  }, [compileStatus]);
+
   // Listen for fullscreen changes
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -519,21 +437,58 @@ export function PreviewPanel({ maximized, onToggleMaximize, style }: {
       <div className="panel-header">
         <span className="panel-title">Preview</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <div className={`status-indicator ${compileStatus}`} />
-          <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
-            {compileStatus === 'compiling' ? 'Compiling...' : compileStatus}
-          </span>
-          {qualityLabel && (
+          {contextLost && (
             <span style={{
               fontSize: 10,
               padding: '1px 6px',
               borderRadius: 8,
-              background: (qualitySeverity === 'high' ? '#f85149' : qualitySeverity === 'medium' ? '#d29922' : '#3fb950') + '20',
-              color: qualitySeverity === 'high' ? '#f85149' : qualitySeverity === 'medium' ? '#d29922' : '#3fb950',
+              background: '#f8514920',
+              color: '#f85149',
             }}>
-              {friendlyQualityLabel(qualityLabel)}
+              Context Lost — refresh page
             </span>
           )}
+          {autoPaused && !contextLost && (
+            <button
+              onClick={() => { setAutoPaused(false); setPlaying(true); }}
+              style={{
+                fontSize: 10,
+                padding: '1px 6px',
+                borderRadius: 8,
+                background: '#d2992220',
+                color: '#d29922',
+                border: 'none',
+                cursor: 'pointer',
+              }}
+              title="Click to resume (shader was auto-paused due to low FPS)"
+            >
+              ⚠ Auto-paused (slow) — click to resume
+            </button>
+          )}
+          {/* Provenance badge */}
+          {compileStatus === 'success' && codeSource !== 'manual' && (
+            <span style={{
+              fontSize: 10,
+              padding: '1px 6px',
+              borderRadius: 8,
+              background: codeSource === 'ai_generation' ? '#3fb95020' : '#d2992220',
+              color: codeSource === 'ai_generation' ? '#3fb950' : '#d29922',
+            }}>
+              {codeSource === 'ai_generation' ? '✨ AI Generated' : '🔧 Auto-Repaired'}
+            </span>
+          )}
+          <div className={`status-indicator ${compileStatus}`} />
+          <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+            {compileStatus === 'compiling' ? 'Compiling...' : compileStatus}
+          </span>
+          <button
+            className="preview-btn"
+            onClick={handleSnapshot}
+            title="Download snapshot"
+            style={{ padding: '2px 6px', fontSize: 12 }}
+          >
+            📸
+          </button>
           <button
             className="preview-btn"
             onClick={onToggleMaximize}

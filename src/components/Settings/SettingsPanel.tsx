@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useAIStore } from '../../store/aiStore';
-import { aiService } from '../../ai/service';
-import { OpenAICompatibleProvider } from '../../ai/providers/openai-compatible';
-import { MockAIProvider } from '../../ai/providers/mock';
-import { normalizeProviderError } from '../../ai/errors/provider-errors';
+import { shaderAgent } from '../../shader-agent/integration/service';
+import { OpenAICompatibleProvider } from '../../shader-agent/integration/providers/openai-compatible';
+import { MockAIProvider } from '../../shader-agent/integration/providers/mock';
+import { normalizeProviderError } from '../../shader-agent/integration/types/provider-errors';
 
 interface SettingsPanelProps {
   isOpen: boolean;
@@ -37,7 +37,7 @@ interface AISettings {
 
 function loadSettings(): AISettings {
   try {
-    const data = sessionStorage.getItem(STORAGE_KEY);
+    const data = localStorage.getItem(STORAGE_KEY);
     if (data) return JSON.parse(data);
   } catch { /* ignore parse errors */ }
   return { provider: 'mock', apiKey: '', baseUrl: '', model: '' };
@@ -45,7 +45,7 @@ function loadSettings(): AISettings {
 
 function saveSettings(settings: AISettings): void {
   try {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
   } catch { /* storage unavailable */ }
 }
 
@@ -56,6 +56,8 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const [testError, setTestError] = useState('');
 
   const setProvider = useAIStore((s) => s.setProvider);
+  const candidateCount = useAIStore((s) => s.candidateCount);
+  const setCandidateCount = useAIStore((s) => s.setCandidateCount);
 
   useEffect(() => {
     if (isOpen) {
@@ -68,7 +70,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
 
     // Apply provider
     if (settings.provider === 'mock') {
-      aiService.setProvider(new MockAIProvider());
+      shaderAgent.setProvider(new MockAIProvider());
       setProvider('Mock AI', 'mock-v1');
     } else {
       const provider = settings.provider === 'custom'
@@ -79,7 +81,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
           })
         : OpenAICompatibleProvider.createPreset(settings.provider, settings.apiKey);
 
-      aiService.setProvider(provider);
+      shaderAgent.setProvider(provider);
       setProvider(settings.provider, settings.model || 'default');
     }
 
@@ -254,7 +256,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
               color: 'var(--text-secondary)',
               marginTop: 6,
             }}>
-              Stored in session storage only. Cleared when you close the browser tab.
+              Stored in local storage. Persists across sessions.
             </p>
           </div>
         )}
@@ -370,6 +372,48 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
             )}
           </div>
         )}
+
+        {/* Generation Quality */}
+        <div style={{ marginBottom: 20 }}>
+          <label style={{
+            display: 'block',
+            fontSize: 13,
+            fontWeight: 600,
+            color: 'var(--text-secondary)',
+            marginBottom: 8,
+          }}>
+            Candidates per request
+          </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <input
+              type="range"
+              min={1}
+              max={3}
+              step={1}
+              value={candidateCount}
+              onChange={(e) => setCandidateCount(Number.parseInt(e.target.value, 10))}
+              style={{ flex: 1, accentColor: 'var(--accent-blue)' }}
+            />
+            <div style={{
+              minWidth: 32,
+              textAlign: 'right',
+              fontSize: 13,
+              fontFamily: 'var(--font-mono)',
+              color: 'var(--text-primary)',
+            }}>
+              {candidateCount}×
+            </div>
+          </div>
+          <p style={{
+            fontSize: 11,
+            color: 'var(--text-secondary)',
+            marginTop: 6,
+          }}>
+            Generate up to {candidateCount} shader{candidateCount === 1 ? '' : 's'} per request
+            and keep the one that best matches your intent. Higher = better visual
+            quality, more API tokens.
+          </p>
+        </div>
 
         {/* Actions */}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>

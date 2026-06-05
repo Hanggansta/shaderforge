@@ -1,12 +1,12 @@
 import { useState, useCallback } from 'react';
 import { useEditorStore } from '../../store/editorStore';
-import { useAIStore, type ChatMessage, type TelemetrySummary } from '../../store/aiStore';
-import { aiService, type AgentProgress } from '../../ai/service';
-import { friendlyQualityLabel } from '../../ai/telemetry/quality-labels';
-import { normalizeProviderError } from '../../ai/errors/provider-errors';
-import { PRESETS } from '../../ai/presets';
+import { useAIStore, type ChatMessage } from '../../store/aiStore';
+import { shaderAgent } from '../../shader-agent/integration/service';
+import type { AgentProgress } from '../../shader-agent/integration/agent-result-types';
+import { normalizeProviderError } from '../../shader-agent/integration/types/provider-errors';
+import { PRESETS } from '../../shader-agent/presets';
 import { SettingsPanel } from '../Settings/SettingsPanel';
-import type { AIIntent } from '../../ai/adapter';
+import type { AIIntent } from '../../shader-agent/integration/types/ai-provider';
 
 const INTENTS: { id: AIIntent; label: string; icon: string }[] = [
   { id: 'auto', label: 'Auto', icon: '🤖' },
@@ -25,69 +25,17 @@ interface ProgressStep {
 
 const PROGRESS_LABELS: Record<string, string> = {
   generating: 'Generating shader',
-  cleaning: 'Cleaning code',
-  validating: 'Validating',
   compiling: 'Compiling',
   fixing: 'Fixing errors',
   success: 'Done',
   failed: 'Failed',
 };
 
-function QualityBadge({ telemetry }: { telemetry?: TelemetrySummary }) {
-  if (!telemetry) return null;
-
-  const severityColor =
-    telemetry.qualitySeverity === 'high' ? '#f85149' :
-    telemetry.qualitySeverity === 'medium' ? '#d29922' :
-    '#3fb950';
-
-  return (
-    <span
-      className="quality-badge"
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 3,
-        fontSize: 10,
-        padding: '1px 6px',
-        borderRadius: 8,
-        background: severityColor + '20',
-        color: severityColor,
-        marginLeft: 6,
-        whiteSpace: 'nowrap',
-      }}
-    >
-      {friendlyQualityLabel(telemetry.qualityLabel)}
-    </span>
-  );
-}
-
-function TelemetryDetails({ telemetry }: { telemetry?: TelemetrySummary }) {
-  if (!telemetry) return null;
-
-  return (
-    <div style={{
-      fontSize: 11,
-      color: 'var(--text-secondary)',
-      marginTop: 6,
-      padding: '6px 8px',
-      background: 'var(--bg-primary)',
-      borderRadius: 4,
-      lineHeight: 1.5,
-    }}>
-      {telemetry.metrics && (
-        <div>
-          Brightness {telemetry.metrics.brightness.toFixed(2)} · Contrast {telemetry.metrics.contrast.toFixed(2)} · Saturation {telemetry.metrics.saturation.toFixed(2)}
-        </div>
-      )}
-      {telemetry.repairAttempted && (
-        <div style={{ marginTop: 3 }}>
-          🔧 Repair: {telemetry.repairSuccess ? 'applied' : 'skipped'}
-          {telemetry.repairSummary && ` — ${telemetry.repairSummary}`}
-        </div>
-      )}
-    </div>
-  );
+function mapIntent(value: string | undefined): AIIntent {
+  if (value === 'create' || value === 'modify' || value === 'fix' || value === 'explain' || value === 'optimize' || value === 'auto') {
+    return value;
+  }
+  return 'auto';
 }
 
 export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
@@ -105,9 +53,10 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
   const setRequestState = useAIStore((s) => s.setRequestState);
   const setLastError = useAIStore((s) => s.setLastError);
 
-  const code = useEditorStore((s) => s.code);
   const setCode = useEditorStore((s) => s.setCode);
   const setCodeFromAI = useEditorStore((s) => s.setCodeFromAI);
+  const undoStack = useEditorStore((s) => s.undoStack);
+  const popUndo = useEditorStore((s) => s.popUndo);
 
   const isLoading = requestState === 'loading';
 
@@ -116,23 +65,20 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
     setProgressSteps((prev) => {
       const existing = prev.findIndex((s) => s.label === label);
       if (existing >= 0) {
-        // Update existing step
         const next = [...prev];
         next[existing] = {
           ...next[existing],
           status: progress.status === 'success' || progress.status === 'failed' ? 'done' : 'active',
-          details: progress.details,
+          details: progress.message,
         };
-        // Mark all previous steps as done
         for (let i = 0; i < existing; i++) {
           next[i] = { ...next[i], status: 'done' };
         }
         return next;
       }
-      // Add new step, mark previous as done
       return [
         ...prev.map((s) => ({ ...s, status: 'done' as const })),
-        { label, status: 'active' as const, details: progress.details },
+        { label, status: 'active' as const, details: progress.message },
       ];
     });
   }, []);
@@ -156,40 +102,19 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
     setProgressSteps([]);
 
     try {
-      const result = await aiService.generate(
+      const result = await shaderAgent.generateAsAgentResult(
         prompt,
-        intent,
         {
           onProgress: handleProgress,
           maxAttempts: 3,
-          currentCode: code,
         }
       );
 
-      const msgIntent = result.detectedIntent || intent;
+      const msgIntent: AIIntent = result.detectedIntent ?? intent;
 
-      if (result.success && result.clarification) {
-        // Low-confidence auto intent — ask user to clarify
-        addMessage({
-          role: 'assistant',
-          content: result.clarification,
-          intent: msgIntent,
-          detectedIntent: result.detectedIntent,
-        });
-      } else if (result.success && result.explanation) {
-        addMessage({
-          role: 'assistant',
-          content: result.explanation,
-          intent: msgIntent,
-          detectedIntent: result.detectedIntent,
-        });
-      } else if (result.success && result.code) {
-        const requestId = aiService.getLastRequestId();
-        if (requestId) {
-          setCodeFromAI(result.code, requestId);
-        } else {
-          setCode(result.code);
-        }
+      if (result.success && result.code) {
+        const requestId = `ai-${Date.now()}-${Math.floor(Math.random() * 1e6).toString(36)}`;
+        setCodeFromAI(result.code, requestId);
 
         const attemptNote = result.attempts > 1
           ? ` (after ${result.attempts} attempts)`
@@ -206,23 +131,12 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
         if (result.errors && result.errors.length > 0) {
           const errorSummary = result.errors
             .slice(0, 3)
-            .map(e => `Line ${e.line}: ${e.rawMessage}`)
+            .map((e) => `Line ${e.line}: ${e.rawMessage}`)
             .join('\n');
 
           addMessage({
             role: 'system',
-            content: `Generation failed after ${result.attempts} attempts.\n${errorSummary}`,
-          });
-        } else if (result.validationIssues && result.validationIssues.length > 0) {
-          const issueSummary = result.validationIssues
-            .filter(i => i.type === 'error')
-            .slice(0, 3)
-            .map(i => i.message)
-            .join('\n');
-
-          addMessage({
-            role: 'system',
-            content: `Generation failed after ${result.attempts} attempts.\n${issueSummary}`,
+            content: `Generation failed after ${result.attempts} attempts.\n${errorSummary}\n\nTry simplifying your description or select a preset.`,
           });
         } else {
           addMessage({
@@ -247,7 +161,7 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
         content: lines.join('\n'),
       });
     }
-  }, [input, activeIntent, isLoading, addMessage, setRequestState, setLastError, code, setCode, setCodeFromAI, handleProgress]);
+  }, [input, activeIntent, isLoading, addMessage, setRequestState, setLastError, setCodeFromAI, handleProgress]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -266,8 +180,15 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
     addMessage({ role: 'system', content: 'Code copied to clipboard!' });
   };
 
+  const handleUndo = () => {
+    const prev = popUndo();
+    if (prev) {
+      addMessage({ role: 'system', content: 'Restored previous shader.' });
+    }
+  };
+
   const handleCancel = () => {
-    aiService.cancel();
+    shaderAgent.cancel();
     setRequestState('cancelled');
     setProgressSteps([]);
     addMessage({ role: 'system', content: 'Request cancelled.' });
@@ -312,9 +233,22 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
           </div>
         </div>
         <div className="panel-content">
+          {providerName === 'Mock AI' && (
+            <div style={{
+              fontSize: 11,
+              padding: '6px 10px',
+              background: '#d2992220',
+              color: '#d29922',
+              borderRadius: 4,
+              marginBottom: 8,
+              lineHeight: 1.4,
+            }}>
+              Using <strong>mock AI</strong> — results are pre-built samples.
+              Configure a real provider in Settings.
+            </div>
+          )}
           <div className="ai-messages">
-            {/* Preset grid — only when no user messages yet */}
-            {!messages.some(m => m.role === 'user') && (
+            {!messages.some((m) => m.role === 'user') && (
               <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(3, 1fr)',
@@ -327,7 +261,7 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
                   color: 'var(--text-secondary)',
                   marginBottom: 4,
                 }}>
-                  ✨ Try a preset to get started, or describe your own shader below.
+                  Try a preset to get started, or describe your own shader below.
                 </div>
                 {PRESETS.map((preset) => (
                   <button
@@ -344,15 +278,11 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
                       border: '1px solid var(--border-color, #333)',
                       borderRadius: 6,
                       cursor: 'pointer',
-                      transition: 'border-color 0.15s',
                       textAlign: 'center',
                       minHeight: 72,
                     }}
-                    onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent, #7c5cbf)'}
-                    onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border-color, #333)'}
                   >
-                    <span style={{ fontSize: 18 }}>{preset.icon}</span>
-                    <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-primary)' }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)' }}>
                       {preset.title}
                     </span>
                     <span style={{ fontSize: 9, color: 'var(--text-secondary)', lineHeight: 1.2 }}>
@@ -370,11 +300,9 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
                   {msg.detectedIntent && msg.detectedIntent !== 'auto'
                     ? ` · ${msg.detectedIntent}`
                     : msg.intent && msg.intent !== 'auto' && ` · ${msg.intent}`}
-                  {msg.telemetry && <QualityBadge telemetry={msg.telemetry} />}
                 </div>
                 <div style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div>
 
-                {/* Telemetry details (collapsible) */}
                 {msg.telemetry && (
                   <div style={{ marginTop: 4 }}>
                     <button
@@ -391,7 +319,66 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
                       {expandedDetails.has(msg.id) ? '▼ Hide details' : '▶ Show details'}
                     </button>
                     {expandedDetails.has(msg.id) && (
-                      <TelemetryDetails telemetry={msg.telemetry} />
+                      <div style={{
+                        fontSize: 11,
+                        color: 'var(--text-secondary)',
+                        marginTop: 6,
+                        padding: '6px 8px',
+                        background: 'var(--bg-primary)',
+                        borderRadius: 4,
+                        lineHeight: 1.5,
+                      }}>
+                        {msg.telemetry.metrics && (
+                          <div>
+                            Brightness {msg.telemetry.metrics.brightness.toFixed(2)} · Contrast {msg.telemetry.metrics.contrast.toFixed(2)} · Saturation {msg.telemetry.metrics.saturation.toFixed(2)}
+                          </div>
+                        )}
+                        {msg.telemetry.repairAttempted && (
+                          <div style={{ marginTop: 3 }}>
+                            Repair: {msg.telemetry.repairSuccess ? 'applied' : 'skipped'}
+                            {msg.telemetry.repairSummary && ` — ${msg.telemetry.repairSummary}`}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {msg.generationSummary && (
+                  <div style={{ marginTop: 4 }}>
+                    <button
+                      onClick={() => toggleDetails(msg.id + '-prov')}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--text-secondary)',
+                        cursor: 'pointer',
+                        fontSize: 10,
+                        padding: 0,
+                      }}
+                    >
+                      {expandedDetails.has(msg.id + '-prov') ? '▼ How this was made' : '▶ How this was made'}
+                    </button>
+                    {expandedDetails.has(msg.id + '-prov') && (
+                      <div style={{
+                        fontSize: 11,
+                        color: 'var(--text-secondary)',
+                        marginTop: 6,
+                        padding: '6px 8px',
+                        background: 'var(--bg-primary)',
+                        borderRadius: 4,
+                        lineHeight: 1.5,
+                      }}>
+                        <div>Scene: <strong>{msg.generationSummary.sceneType}</strong></div>
+                        <div>Mood: <strong>{msg.generationSummary.mood}</strong></div>
+                        <div>Palette: <strong>{msg.generationSummary.palette}</strong></div>
+                        <div>Technique: <strong>{msg.generationSummary.baseTechnique}</strong></div>
+                        <div>Motion: <strong>{msg.generationSummary.motionType}</strong></div>
+                        <div>Attempts: <strong>{msg.generationSummary.attempts}</strong></div>
+                        {typeof msg.generationSummary.visualScore === 'number' && (
+                          <div>Visual quality: <strong>{msg.generationSummary.visualScore}/100</strong></div>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}
@@ -426,13 +413,22 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
                       >
                         Copy
                       </button>
+                      {undoStack.length > 0 && (
+                        <button
+                          className="toolbar-btn"
+                          style={{ fontSize: 11 }}
+                          onClick={handleUndo}
+                          title="Restore previous shader"
+                        >
+                          Undo
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
               </div>
             ))}
 
-            {/* Progress timeline */}
             {isLoading && progressSteps.length > 0 && (
               <div className="ai-message assistant">
                 <div className="ai-message-label">AI</div>
@@ -449,7 +445,7 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
                       }}
                     >
                       <span style={{ fontSize: 12, width: 16, textAlign: 'center' }}>
-                        {step.status === 'done' ? '✅' : step.status === 'active' ? '⏳' : '·'}
+                        {step.status === 'done' ? '✓' : '·'}
                       </span>
                       <span style={{
                         fontWeight: step.status === 'active' ? 500 : 400,
@@ -457,11 +453,6 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
                       }}>
                         {step.label}
                       </span>
-                      {step.status === 'active' && progressSteps.some(s => s.label === 'Generating shader') && step.label === 'Generating shader' && (
-                        <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
-                          Attempt {progressSteps.find(s => s.label === 'Generating shader')?.details || ''}
-                        </span>
-                      )}
                     </div>
                   ))}
                   <button
@@ -475,7 +466,6 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
               </div>
             )}
 
-            {/* Loading without progress (fallback) */}
             {isLoading && progressSteps.length === 0 && (
               <div className="ai-message assistant">
                 <div className="ai-message-label">AI</div>
@@ -499,7 +489,7 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
                 <button
                   key={intent.id}
                   className={`ai-intent-btn ${activeIntent === intent.id ? 'active' : ''}`}
-                  onClick={() => setActiveIntent(intent.id)}
+                  onClick={() => setActiveIntent(mapIntent(intent.id))}
                   title={intent.label}
                 >
                   {intent.icon} {intent.label}
@@ -514,7 +504,7 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
                 onKeyDown={handleKeyDown}
                 placeholder={
                   activeIntent === 'auto'
-                    ? 'Describe what you want — I\'ll figure out the rest...'
+                    ? "Describe what you want — I'll figure out the rest..."
                     : activeIntent === 'create'
                     ? 'Describe any shader you want to create...'
                     : activeIntent === 'fix'

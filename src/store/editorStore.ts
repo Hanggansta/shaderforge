@@ -21,6 +21,8 @@ interface EditorState {
   lastRequestId: string | null;
   /** Source of the current code - tracks provenance for auto-repair safety */
   codeSource: CodeSource;
+  /** Simple undo stack for restoring previous shader after AI generation (max 3) */
+  undoStack: string[];
 
   // Actions
   setCode: (code: string) => void;
@@ -31,6 +33,8 @@ interface EditorState {
   markDirty: (dirty: boolean) => void;
   setLastValidCode: (code: string | null) => void;
   clearRequestId: () => void;
+  pushUndo: () => void;
+  popUndo: () => string | null;
   reset: () => void;
 }
 
@@ -54,7 +58,9 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
   fragColor = vec4(col, 1.0);
 }`;
 
-export const useEditorStore = create<EditorState>((set) => ({
+const MAX_UNDO = 3;
+
+export const useEditorStore = create<EditorState>((set, get) => ({
   code: DEFAULT_CODE,
   compileStatus: 'idle',
   compileErrors: [],
@@ -62,15 +68,36 @@ export const useEditorStore = create<EditorState>((set) => ({
   lastValidCode: null,
   lastRequestId: null,
   codeSource: 'manual',
+  undoStack: [],
 
   setCode: (code) => set({ code, isDirty: true, lastRequestId: null, codeSource: 'manual' }),
-  setCodeFromAI: (code, requestId) => set({ code, isDirty: true, lastRequestId: requestId, codeSource: 'ai_generation' }),
-  setCodeFromRepair: (code, requestId) => set({ code, isDirty: true, lastRequestId: requestId, codeSource: 'quality_repair' }),
+  setCodeFromAI: (code, requestId) => {
+    const prev = get().code;
+    const stack = [prev, ...get().undoStack].slice(0, MAX_UNDO);
+    set({ code, isDirty: true, lastRequestId: requestId, codeSource: 'ai_generation', undoStack: stack });
+  },
+  setCodeFromRepair: (code, requestId) => {
+    const prev = get().code;
+    const stack = [prev, ...get().undoStack].slice(0, MAX_UNDO);
+    set({ code, isDirty: true, lastRequestId: requestId, codeSource: 'quality_repair', undoStack: stack });
+  },
   setCompileStatus: (compileStatus) => set({ compileStatus }),
   setCompileErrors: (compileErrors) => set({ compileErrors }),
   markDirty: (isDirty) => set({ isDirty }),
   setLastValidCode: (lastValidCode) => set({ lastValidCode }),
   clearRequestId: () => set({ lastRequestId: null }),
+  pushUndo: () => {
+    const prev = get().code;
+    const stack = [prev, ...get().undoStack].slice(0, MAX_UNDO);
+    set({ undoStack: stack });
+  },
+  popUndo: () => {
+    const stack = get().undoStack;
+    if (stack.length === 0) return null;
+    const [code, ...rest] = stack;
+    set({ code, undoStack: rest, isDirty: true, lastRequestId: null, codeSource: 'manual' });
+    return code;
+  },
   reset: () => set({
     code: DEFAULT_CODE,
     compileStatus: 'idle',
@@ -79,5 +106,6 @@ export const useEditorStore = create<EditorState>((set) => ({
     lastValidCode: null,
     lastRequestId: null,
     codeSource: 'manual',
+    undoStack: [],
   }),
 }));

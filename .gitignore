@@ -22,3 +22,19 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Secrets and local environment
+.env
+.env.local
+
+# Agent / debugging artifacts
+.claude/
+.playwright-mcp/
+
+# Temporary screenshots and archives
+all_codes.zip
+*.png
+!public/**/*.png
+
+# Bulk shader dataset (RAG input, not used in V1)
+data/shaders21k/

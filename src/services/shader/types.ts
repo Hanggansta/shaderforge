@@ -11,4 +11,5 @@ export interface ShaderCompileError {
 }
 
 // Number of header lines added by wrapFragmentShader before user code
-export const WRAPPER_HEADER_LINE_COUNT = 11;
+// Count: #version, precision, blank, comment, 6 uniforms, blank, comment = 12 lines
+export const WRAPPER_HEADER_LINE_COUNT = 12;
