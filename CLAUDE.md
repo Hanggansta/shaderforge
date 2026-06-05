@@ -1,67 +1,123 @@
 # ShaderForge
 
-Browser-based Shadertoy-style GLSL shader editor with AI-assisted code generation.
-## Product North Star
+Browser-based Shadertoy-style GLSL shader editor with AI-assisted shader generation.
 
-ShaderForge is not just a Shadertoy clone with AI code generation.
+> **V1 状态**：V1 完成，V2 在路上（编译自动修复）。
+> **V1 计划原文**：`shader_agent_harness_plan.html`（最高优先级）。
+> **设计语言**：[DESIGN.md](./DESIGN.md)。
 
-ShaderForge is an AI-native shader creation studio: a visual invention machine where users can create, modify, debug, critique, and refine GLSL shader art through natural language, reference images, visual feedback, agent loops, and structured shader knowledge.
+## V1-V5 Roadmap
 
-The goal is not merely compiling valid GLSL. The goal is to help users produce visually ambitious, editable, performant, Shadertoy-style procedural art.
+V1 核心原则：**先稳定、再聪明；先编译、再审美；先技术卡、再 RAG；先手写 workflow、再 Mastra。**
 
-Core product principles:
+| 阶段 | 目标 | 状态 |
+|---|---|---|
+| **V1** | Input prompt → Visual Structurer → Shader Planner → Reference Selector → Code Agent → Compiler → Screenshot Renderer。固定 workflow，编译能通过，截图能出。 | ✅ Done |
+| **V2** | 编译自动修复：Compiler 失败 → Code Agent 拿错误日志重写 → 2-3 次 retry。 | ⏳ Next |
+| **V3** | 截图反馈 Patch：Screenshot → Visual diff → Code Agent 改。 | ⏳ Planned |
+| **V4** | Technique Cards 扩到 20-50 张；建立 index / search。 | ⏳ Planned |
+| **V5** | Mastra / 半 RAG / 视觉评估；candidate-eval 接 workflow。 | ⏳ Planned |
 
-* Visual quality matters as much as code correctness.
-* A shader that compiles but looks boring is not a successful result.
-* Natural-language intent must be understood structurally, not reduced to keyword matching.
-* Reference images must be analyzed through the vision pipeline before visual conclusions are made.
-* AI generation should move through a creative loop: intent → visual spec → GLSL plan → code → compile check → performance check → visual critique → refinement.
-* The product should make shader creation feel magical, controllable, inspectable, and iterative.
-* Do not downgrade ambitious visual goals into safe templates, generic gradients, or low-effort noise fields.
+## Architecture (V1)
 
-## Tech Stack
+**固定 workflow，禁止 Agent 自由决定下一步。**
 
-- **Framework**: React 19 + TypeScript (strict mode)
-- **Build**: Vite 8 + @vitejs/plugin-react
-- **State**: Zustand 5 (one store per domain)
-- **Editor**: Monaco Editor (@monaco-editor/react)
-- **Linting**: ESLint 10 + typescript-eslint
+```
+User Prompt
+   ↓
+Agent 1: Visual Structurer ──→ VisualCard (mustHave/avoid/...)
+   ↓
+Agent 2: Shader Planner ──→ ShaderPlan (modules + referenceNeeds)
+   ↓
+Tool 1: Reference Selector ──→ ReferenceCard[] (3-5 technique cards)
+   ↓
+Agent 3: Code/Patch Agent ──→ GLSL (Shadertoy mainImage)
+   ↓
+Tool 2: Shader Compiler ──→ CompileReport
+   ↓ (V1: log only; V2: retry loop)
+Tool 3: Screenshot Renderer ──→ Screenshot[] (multi-frame)
+   ↓
+Output
+```
 
-## Architecture
+**职责边界（硬性）**：
+
+- **Agent** = 理解、规划、写代码、修代码。**只调 LLM**，不做真实 IO。
+- **Tool** = 选择参考、真实编译、真实截图。**deterministic**，**不调 LLM**。
+- **Workflow** = 强制调度 Agent / Tool 顺序。Agent 不许决定"下一步该调谁"。
+
+## V1 验收标准
+
+| 模块 | V1 验收 |
+|---|---|
+| Agent 1: Visual Structurer | 稳定输出 VisualCard JSON（含 mustHave / avoid / palette / motion / composition）。 |
+| Agent 2: Shader Planner | 把 VisualCard 拆成 modules + referenceNeeds；不返回噪声字段。 |
+| Tool 1: Reference Selector | 返 3-5 张技术卡；fallback 到 9 张 golden shader；不超范围。 |
+| Agent 3: Code/Patch Agent | 输出 Shadertoy `mainImage(out vec4 fragColor, in vec2 fragCoord)`，可编译。 |
+| Tool 2: Shader Compiler | 浏览器内用 WebGL2 真实编译；返 CompileReport（含错误日志 / 行号）。 |
+| Tool 3: Screenshot Renderer | 稳定输出 PNG / 多帧 screenshot（含 iTime 系列）。 |
+
+## Code Structure
 
 ```
 src/
-├── ai/               # AI service layer
-│   ├── adapter.ts    # Provider interface + intent types
-│   ├── agent-loop.ts # Retry loop with compile feedback
-│   ├── service.ts    # AIService singleton
-│   ├── knowledge/    # Shader knowledge base
-│   │   ├── rag/      # RAG system (types, search, embeddings, loader, preprocess)
-│   │   ├── scene-instructions.ts  # Scene-specific GLSL techniques
-│   │   ├── mood-palettes.ts       # Mood → color palette mapping
-│   │   ├── motion-patterns.ts     # Motion → GLSL animation patterns
-│   │   └── pitfalls.ts            # Common GLSL generation pitfalls
-│   └── providers/    # Mock + OpenAI-compatible providers
-├── components/
-│   ├── AIChat/       # Chat panel for shader generation
-│   ├── Editor/       # Monaco editor with GLSL snippets
-│   ├── ErrorBar/     # Compile error display
-│   ├── Preview/      # WebGL shader preview
-│   ├── Settings/     # Provider configuration
-│   └── Toolbar/      # Top toolbar
-├── store/            # Zustand stores (editorStore, aiStore, projectStore, previewStore, uiStore)
-├── editor/           # Monaco config (error markers, GLSL snippets, shortcuts)
-├── templates/        # Shader templates
-└── utils/            # debounce, shareUrl
+├── shader-agent/                # V1 harness 核心（来自 V1 计划目录建议）
+│   ├── schemas/                 # 5 个 V1 必做 schema
+│   │   ├── visual-card.ts
+│   │   ├── shader-plan.ts
+│   │   ├── reference-card.ts
+│   │   ├── compile-report.ts
+│   │   └── shader-result.ts
+│   ├── agents/                  # 3 个 V1 必做 Agent
+│   │   ├── visual-structurer.ts
+│   │   ├── shader-planner.ts
+│   │   └── code-patch-agent.ts
+│   ├── tools/                   # 3 个 V1 必做 Tool
+│   │   ├── reference-selector.ts
+│   │   ├── shader-compiler.ts
+│   │   └── screenshot-renderer.ts
+│   ├── workflows/               # V1 workflow
+│   │   ├── generate-shader.ts
+│   │   └── patch-shader.ts
+│   ├── kb/                      # V1: 9 张 golden shader（V4 扩到 20-50）
+│   ├── runs/                    # V1: in-memory artifact store
+│   ├── llm-client.ts            # LLMClient 抽象
+│   ├── presets.ts               # 10 个 starter preset
+│   ├── integration/             # 桥接 aiStore / AIChatPanel
+│   │   ├── service.ts           #   shaderAgent 单例
+│   │   ├── llm-adapters.ts      #   OpenAI-compatible / Mock
+│   │   ├── providers/           #   provider 实现
+│   │   ├── agent-result-adapter.ts
+│   │   └── agent-result-types.ts
+│   └── __tests__/               # 5 个测试文件 / 34 测试
+├── services/
+│   └── shader/                  # 浏览器内 WebGL 编译 + 截图（offscreen-renderer）
+├── components/                  # Preview / Editor / AIChat / Settings / Toolbar / ErrorBar
+├── store/                       # Zustand: editor / ai / project / preview / ui
+├── editor/                      # Monaco config + GLSL snippets
+├── templates/                   # 内置 starter template
+└── utils/                       # debounce / shareUrl
 ```
+
+## Tech Stack
+
+- **Framework**: React 19 + TypeScript（strict mode, `erasableSyntaxOnly`）
+- **Build**: Vite 8 + @vitejs/plugin-react
+- **State**: Zustand 5（one store per domain）
+- **Editor**: Monaco Editor（@monaco-editor/react）
+- **Linting**: ESLint 10 + typescript-eslint
+- **WebGL**: 浏览器内原生 WebGL2（`src/services/shader/offscreen-renderer.ts`）
+- **AI**: V1 = OpenAI SDK + 手写 Workflow（Mastra V5 评估）
+- **Test**: Vitest（5 个 shader-agent 测试文件）
 
 ## Key Patterns
 
-- **Store pattern**: `create<Interface>((set) => ({ ... }))` from zustand, one file per domain
-- **Component style**: Named exports, functional components, hooks at top
-- **AI intents**: `create | modify | fix | explain | optimize` — defined in `ai/adapter.ts`
-- **Agent loop**: AI generates code → compile → if errors, retry with error context (max 3 attempts)
-- **Shader convention**: Shadertoy-style `mainImage(out vec4 fragColor, in vec2 fragCoord)` with `iTime`, `iResolution`, `iMouse` uniforms
+- **Workflow pattern**：每个 workflow 强制调度 Agent + Tool，定义"先调谁 / 失败怎么办 / 怎么衔接"。
+- **Agent pattern**：`Agent<I, O> = (input, ctx) => Promise<O>`，**只调 LLM**，不做真实 IO。
+- **Tool pattern**：`Tool<I, O> = (input) => Promise<O>`，**deterministic**，不调 LLM。
+- **Schema pattern**：TypeScript interface + 显式 `validate()` 守卫，输出和持久化都用 schema。
+- **Store pattern**：`create<Interface>((set) => ({ ... }))` from Zustand，one file per domain。
+- **Shader convention**：Shadertoy-style `mainImage(out vec4 fragColor, in vec2 fragCoord)` with `iTime` / `iResolution` / `iMouse` uniforms。
 
 ## Commands
 
@@ -69,355 +125,122 @@ src/
 npm run dev        # Start dev server
 npm run build      # Type-check + production build
 npm run lint       # ESLint
+npm test           # Vitest unit tests
 ```
 
 ## Conventions
 
-- No unused locals/params (tsconfig `noUnusedLocals` + `noUnusedParameters`)
-- `erasableSyntaxOnly: true` — no runtime enums or namespaces
-- JSX: `react-jsx` transform (no React import needed)
-- CSS: CSS modules not used — plain CSS files (`App.css`, `index.css`)
-- Error boundaries wrap each major panel (AI, Editor, Preview)
+- No unused locals/params（`noUnusedLocals` + `noUnusedParameters`）。
+- `erasableSyntaxOnly: true` — no runtime enums or namespaces。
+- JSX: `react-jsx` transform（no React import needed）。
+- CSS: plain CSS files（无 CSS modules）。
+- Error boundaries wrap each major panel（AI / Editor / Preview）。
+- 禁止 commit `.env` / 截图 / 大文件（见 `.gitignore`）。
 
-## Vision Routing
+## Rules
 
-Main thread model: `mimo-v2.5-pro[1m]` — **cannot read images**. Main thread visual tasks MUST go through `mimo-vision-agent`.
+### 1. V1 范围内不做 V2-V5 的事
 
-All subagents use `model: haiku` (mimo-v2.5) — **they can read images directly** and do not need routing through `mimo-vision-agent`.
+不要为 V2（自动修复）/ V3（截图反馈 Patch）/ V4（Technique Cards 扩 20-50）/ V5（Mastra / RAG / 视觉评估）写代码，除非用户明确指定做下一阶段。
 
-### Main Thread Rules
+**反例**：把 `candidate-eval` 视觉评分接进 workflow（V5 才接）。
+**反例**：把 compile error 拿去做 retry loop（V2 才接）。
+**反例**：用 50 张 technique card 做 RAG（V4 才扩）。
 
-1. **ALWAYS** call `mimo-vision-agent` for any visual analysis on the main thread.
-2. **NEVER** pass full conversation history to the vision agent — only the current image/path and minimal task context.
-3. If the image is already in context (user pasted it directly), you MUST still call `mimo-vision-agent` — do not analyze it yourself.
+### 2. Workflow 强制调用，不让 Agent 自由决定下一步
 
-### Subagent Rules
+每个 workflow 必须明确定义：先调哪个 Agent、Tool 怎么衔接、失败怎么处理。Agent **不许**自己决定"该调哪个 tool / 是否重试"。
 
-Subagents can read images directly. Each agent has **Visual Analysis Standards** in its definition specifying the required analysis quality and granularity for its domain.
+**反例**：在 Agent 3 内部写"如果编译失败就重试"。
+**反例**：让 LLM 决定下一步调 reference-selector 还是 compiler。
 
-### Vision Report Requirements
+### 3. 编译成功是 V1 唯一硬指标
 
-`mimo-vision-agent` must return **detailed, thorough** visual reports. Do not summarize or abbreviate.
+V1 范围内，shader 必须能在浏览器内真实编译、能跑出非黑屏截图。视觉审美 / 风格完美 / 光影高级 — 这些是 V2-V5 的事。
 
-Required sections (all mandatory, every time):
-1. Visual Summary
-2. Detailed Visual Breakdown (composition, color, lighting, texture, depth)
-3. Shader-Specific Analysis (technique, quality metrics, artifacts)
-4. UI-Specific Analysis (layout, components, information architecture)
-5. Comparison Analysis (when reference image provided)
-6. Actionable Guidance (specific, prioritized, not vague)
-7. Uncertainties
+### 4. Tool 必须 deterministic，不调 LLM
 
-If the image type is ambiguous, include ALL relevant analysis sections (both Section 3 and Section 4). Do not guess the type and skip a section.
+Tool = 真实 WebGL 编译 / 真实截图 / 真实查表。Tool 不读 LLM，不发外部网络（Reference Selector 只查内置 golden shader 表）。
 
-Hard rules for reports:
-- Name colors by specific hue ("deep magenta", "cool cyan"), not generic ("blue", "red")
-- Explain WHY something works or fails, not just THAT it does
-- Provide concrete, actionable guidance — specific GLSL techniques, specific CSS changes
-- Commit to observations; move ambiguity to Uncertainties section
-- Report ALL sections even if brief — structure consistency aids downstream parsing
+### 5. 性能与安全仍是 hard constraint
+
+不管 V1 多"最小闭环"，shader 都不能冻结浏览器：
+
+- 禁止无界循环 / 过度 raymarch / 嵌套昂贵 noise。
+- 编译失败时显示 error，不静默吃错。
+- 不上传 .env / API key / 截图进 git。
+
+### 6. 验证
+
+每次改动后：
+
+- `npm run lint` 走 ESLint。
+- `npm test` 跑 5 个 shader-agent 测试。
+- `npm run build` 走 type-check + 生产 build。
+- 浏览器视觉验证由用户 `npm run dev` 手动跑（LLM / 视觉评分不在主线程跑）。
+
+### 7. Completion Report
+
+完成一项后给一个简短汇报：
+
+- 改了什么文件
+- 跑了什么检查
+- 还有什么 known gap
+- 下一步建议
+
+**不要**把"完成"和"看起来差不多"画等号。
 
 ## Subagents
 
 ### Available Agents
 
-| Agent | Model | Role | Visual | Edit |
+| Agent | Model | 职责 | 视觉 | 编辑 |
 |---|---|---|---|---|
 | mimo-vision-agent | haiku | 视觉分析专用（主线程调用） | ✅ | ❌ |
-| glsl-shadertoy-engineer | haiku | GLSL 代码审查、shader 视觉质量评审 | ✅ | ❌ |
-| frontend-product-engineer | haiku | UI/UX 审查、布局分析、交互评估 | ✅ | ❌ |
-| shader-runtime-debugger | haiku | 调试编译失败、运行时 bug、修复代码 | ✅ | ✅ |
-| performance-safety-engineer | haiku | 性能分析、安全审查、浏览器冻结风险 | ✅ | ❌ |
-| qa-regression-engineer | haiku | 测试设计、回归验证、QA 检查 | ✅ | ❌ |
-| ai-shader-pipeline-architect | sonnet | AI 管线架构审查、intent/spec/plan 设计 | ❌ | ❌ |
-| principal-architect | sonnet | 系统架构审查、模块边界、技术债 | ❌ | ❌ |
+| glsl-shadertoy-engineer | haiku | GLSL 代码审查 / shader 视觉质量评审 | ✅ | ❌ |
+| frontend-product-engineer | haiku | UI/UX 审查 / 布局分析 / 交互评估 | ✅ | ❌ |
+| shader-runtime-debugger | haiku | 调试编译失败 / 运行时 bug / 修复代码 | ✅ | ✅ |
+| performance-safety-engineer | haiku | 性能分析 / 安全审查 / 浏览器冻结风险 | ✅ | ❌ |
+| qa-regression-engineer | haiku | 测试设计 / 回归验证 / QA 检查 | ✅ | ❌ |
+| ai-shader-pipeline-architect | sonnet | shader-agent 架构审查 / workflow 设计 | ❌ | ❌ |
+| principal-architect | sonnet | 系统架构审查 / 模块边界 / 技术债 | ❌ | ❌ |
 
-### When to Use Which Agent
+### Vision Routing
 
-| 任务类型 | 首选 Agent | 备选 |
-|---|---|---|
-| 看图分析（主线程） | mimo-vision-agent | — |
-| 审查 GLSL 代码质量 | glsl-shadertoy-engineer | — |
-| 审查 UI/UX | frontend-product-engineer | — |
-| 调试 shader 编译/运行时问题 | shader-runtime-debugger | — |
-| 分析 shader 性能/安全 | performance-safety-engineer | — |
-| 设计/验证测试 | qa-regression-engineer | — |
-| 审查 AI 管线架构 | ai-shader-pipeline-architect | — |
-| 审查系统架构 | principal-architect | — |
-| 广度搜索（找文件/代码位置） | Explore（内置） | 主线程 Glob/Grep |
-| 设计实现方案 | Plan（内置） | 主线程直接分析 |
-| 没有匹配的 agent | 主线程直接完成 | — |
+主线程模型（`minimax-m3-free`）**不能读图**。所有主线程视觉任务必须走 `mimo-vision-agent`。
+所有 subagent 用 `haiku`，**可以直接读图**，无需绕 vision-agent。
 
-### How to Call
+主线程硬规则：
 
-```
-Agent(subagent_type: "agent-name", prompt: "任务描述")
-```
+1. 任何视觉分析 → `mimo-vision-agent`。
+2. 不传完整对话历史给 vision-agent，只传当前图片 + 任务上下文。
+3. 即使图片已在上下文中（用户直接粘贴），主线程仍必须调 `mimo-vision-agent`，不自分析。
 
-- `subagent_type` 必须与 `.claude/agents/` 中的文件名（不含 `.md`）完全匹配
-- `prompt` 应该清晰、具体、有限范围
-- 对于后台 agent 使用 `run_in_background: true`
+### Vision Report Requirements
 
-### Priority Rules
+`mimo-vision-agent` 必须返回**详细、彻底**的视觉报告。Required sections：
 
-1. **项目 agent 优先**：有匹配职责的项目 agent 时，必须使用项目 agent
-2. **主线程兜底**：没有匹配的项目 agent 时，在主线程上直接完成
-3. **内置 agent 补充**：仅当项目 agent 和主线程都不适合时，使用内置 agent
+1. Visual Summary
+2. Detailed Visual Breakdown（composition / color / lighting / texture / depth）
+3. Shader-Specific Analysis（technique / quality metrics / artifacts）
+4. UI-Specific Analysis（layout / components / information architecture）
+5. Comparison Analysis（提供 reference image 时）
+6. Actionable Guidance（具体、可执行、非空泛）
+7. Uncertainties
 
-### Built-in Agent Rules
+### Subagent 失败处理
 
-- **Explore**：仅用于广度搜索（找文件、找代码位置、搜索关键词），不用于深度分析或读取完整文件
-- **Plan**：仅用于设计方案，不用于直接执行或修改文件
-- **general-purpose**：不建议使用，优先用项目 agent 或主线程
-- **禁止**：不使用内置 agent 处理视觉任务（必须用 mimo-vision-agent 或有视觉能力的项目 agent）
+如果 subagent 返回空 / 超时 / 静默失败，**必须立即告诉用户**。不假装成功。
 
-### Failure Handling
+## Definition of Done
 
-**如果任何 subagent 没有返回结果（空输出、超时、静默失败），必须立即提醒用户。** 不要忽略失败的 agent，不要假装它成功了。
+V1 任务 done 的条件：
 
-检测方式：
-- 后台 agent 完成后检查输出是否为空
-- Agent 返回后检查是否有实际内容
-- 如果 agent 在合理时间内没有响应，告知用户
+- 在 V1 范围里（不偷偷做 V2-V5）。
+- 编译能过（V1 硬指标）。
+- 5 个 shader-agent 测试 + lint + build 全过。
+- 浏览器内能跑（用户 `npm run dev` 验证）。
+- 没把 .env / 截图 / 临时文件 commit。
+- 给一个简短 completion report。
 
-## Rules
-
-### 1. Think Before Coding, But Do Not Stall
-
-Do not hide uncertainty. State assumptions and tradeoffs clearly.
-
-However, uncertainty is not automatically a stop condition. If a decision is safe, reversible, and grounded in the repository, make a reasonable assumption and continue.
-
-Ask the user only when the decision is destructive, security-sensitive, payment-related, requires external credentials, changes model/provider routing, or is likely to cause major rework.
-
-### 2. Use the Right Mode: Maintenance vs Innovation
-
-ShaderForge has two working modes.
-
-#### Maintenance Mode
-
-Use conservative engineering when the user asks for:
-
-* bug fixes,
-* regressions,
-* type errors,
-* build failures,
-* small UI corrections,
-* performance hazards,
-* broken provider settings.
-
-In this mode, keep changes focused and verify carefully.
-
-#### Innovation Mode
-
-Use ambitious system-building when the user asks for:
-
-* AI shader generation quality,
-* agent loop improvements,
-* visual critique,
-* reference image matching,
-* RAG / shader knowledge,
-* natural-language modification,
-* shader style systems,
-* world-class product experience,
-* revolutionary creative workflow.
-
-In this mode, do not hide behind minimal patches. Build the architecture, state model, interfaces, demo paths, and validation loops needed for the final product.
-
-### 3. Do Not Downgrade Creative Goals
-
-Do not replace ambitious shader creation goals with:
-
-* generic gradients,
-* random noise fields,
-* plain color palette swaps,
-* shallow keyword matching,
-* one-off templates,
-* compile-only success,
-* low-effort UI polish.
-
-If the full feature is too large, implement the strongest useful slice:
-
-* structured types,
-* pipeline boundary,
-* visible prototype,
-* test/demo path,
-* fallback behavior,
-* clear next step.
-
-Never claim a feature is complete if only a placeholder exists.
-
-### 4. Natural Language Intent Must Be Structured
-
-Do not use keyword matching as the primary mechanism for create/modify intent.
-
-The main path should convert user requests into structured shader intent/spec, such as:
-
-* scene,
-* subject,
-* palette,
-* mood,
-* motion,
-* material,
-* camera,
-* depth,
-* composition,
-* interaction,
-* complexity,
-* performance budget,
-* requested edit target.
-
-Keyword rules may be used only as fallback, validation, or safety guardrails.
-
-Modification requests must identify what the user wants changed and what must be preserved.
-
-### 5. Visual Quality Bar
-
-A generated shader is successful only if it is:
-
-* compilable,
-* visually aligned with the prompt,
-* aesthetically strong,
-* animated with purpose,
-* readable as a coherent scene or material,
-* performant enough not to freeze the browser,
-* editable for follow-up prompts.
-
-Evaluate visual quality using:
-
-* composition,
-* depth,
-* color harmony,
-* motion quality,
-* material richness,
-* procedural detail,
-* prompt alignment,
-* uniqueness,
-* performance,
-* editability.
-
-A shader that only compiles is not enough.
-
-### 6. Creative Agent Loop
-
-For major AI shader work, prefer this loop:
-
-1. parse user intent into structured shader spec,
-2. retrieve relevant shader knowledge or patterns,
-3. create a shader plan,
-4. generate GLSL,
-5. compile and repair errors,
-6. check performance risk,
-7. use visual analysis when screenshots or reference images are involved,
-8. refine based on visual critique,
-9. report what improved and what remains.
-
-Do not stop at compile success when the user asked for visual excellence.
-
-### 7. Reference Image Workflow
-
-When the user provides a reference image, follow the Vision Routing rules exactly.
-
-Main thread visual analysis MUST go through `mimo-vision-agent`.
-
-The reference workflow should be:
-
-1. call `mimo-vision-agent`,
-2. extract composition, color, lighting, texture, depth, subject, and artifacts,
-3. translate the visual report into ShaderSpec requirements,
-4. identify GLSL techniques needed,
-5. generate or modify shader code,
-6. compare output against the reference when possible,
-7. iterate with concrete visual deltas.
-
-Do not guess image contents on the main thread.
-
-### 8. Subagent Discipline
-
-Use project agents when their role matches the task.
-
-* Use `mimo-vision-agent` for main-thread visual analysis.
-* Use `glsl-shadertoy-engineer` for GLSL quality review.
-* Use `shader-runtime-debugger` for compile/runtime repair.
-* Use `performance-safety-engineer` for browser freeze and GPU-risk analysis.
-* Use `frontend-product-engineer` for UI/UX review.
-* Use `ai-shader-pipeline-architect` for intent/spec/agent-loop design.
-* Use `principal-architect` for major system boundaries.
-
-If a subagent returns empty output, times out, or silently fails, report it. Do not pretend it succeeded.
-
-### 9. Performance Safety Is Part of Visual Quality
-
-Beautiful shaders must not freeze the browser.
-
-Watch for:
-
-* unbounded loops,
-* excessive raymarch steps,
-* nested expensive noise,
-* high iteration fractals,
-* divergent branches,
-* textureless feedback loops,
-* resolution-dependent explosions,
-* mobile-hostile workloads.
-
-When visual ambition conflicts with safety, preserve the look through cheaper approximations, quality tiers, or fallback paths.
-
-### 10. Verification
-
-Run relevant checks after changes:
-
-* `npm run build` for production-impacting changes,
-* `npm run lint` for lint/type issues,
-* shader compile checks for GLSL generation,
-* visual inspection or vision-agent critique for visual tasks,
-* performance review for heavy shaders.
-
-If a check cannot run, explain why and continue with other verifiable work.
-
-### 11. Completion Report
-
-At the end of each run, report:
-
-* completed work units,
-* files changed,
-* visible product changes,
-* shader quality impact,
-* agent calls used,
-* checks run,
-* checks not run and why,
-* known gaps,
-* next recommended work units.
-
-Do not report “done” for a visual feature unless it is visible, testable, or demonstrated through a clear workflow.
-
-### 12. Definition of Done
-
-A task is done only when:
-
-* it preserves existing model and agent routing,
-* it does not break the editor or preview,
-* it improves the requested behavior,
-* it respects shader performance safety,
-* it avoids shallow keyword hacks as the main path,
-* it advances the AI-native shader creation vision,
-* and its result can be verified by code, compile output, UI behavior, or visual analysis.
-
-The default behavior is to keep moving toward a stronger creative system, not to find reasons to stop.
-
-## MCP Tools
-
-### Search
-
-**所有网络搜索请求必须使用 `tavily-search` MCP server（`mcp__tavily-search__tavily_search`）。** 不使用 WebSearch、WebFetch 或其他搜索工具。
-
-可用的 tavily-search 工具：
-- `mcp__tavily-search__tavily_search` — 通用网页搜索（首选）
-- `mcp__tavily-search__tavily_extract` — 从 URL 提取内容
-- `mcp__tavily-search__tavily_crawl` — 爬取网站
-- `mcp__tavily-search__tavily_map` — 映射网站结构
-- `mcp__tavily-search__tavily_research` — 深度研究（多源综合）
-
-## Design Reference
-
-For product design direction, visual language, layout, color system, motion, shader quality bar, and aesthetic categories, see [DESIGN.md](./DESIGN.md). That file is the authoritative design spec for ShaderForge.
+**视觉审美、自动修复、截图反馈、20-50 张技术卡、Mastra** —— 这些是 V2-V5 的事，**不是 V1 done 的条件。**

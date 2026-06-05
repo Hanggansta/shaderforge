@@ -1,15 +1,35 @@
 # ShaderForge
 
-Browser-based Shadertoy-style GLSL shader editor with AI-assisted code generation.
+Browser-based Shadertoy-style GLSL shader editor with AI-assisted shader generation.
 
-## Tech Stack
+> **V1 状态**：V1 完成，V2 在路上（编译自动修复）。
+> V1 计划原文：`shader_agent_harness_plan.html`。
+> V1-V5 roadmap / 验收标准：[CLAUDE.md](./CLAUDE.md)。
+> 设计语言：[DESIGN.md](./DESIGN.md)。
 
-- **Framework**: React 19 + TypeScript (strict mode)
-- **Build**: Vite 8 + @vitejs/plugin-react
-- **State**: Zustand 5 (one store per domain)
-- **Editor**: Monaco Editor (@monaco-editor/react)
-- **Linting**: ESLint 10 + typescript-eslint
-- **Testing**: Vitest
+## What ShaderForge Does (V1)
+
+ShaderForge turns a natural-language prompt into a runnable GLSL shader, compiles it in the browser via WebGL2, and renders multi-frame screenshots — all through a fixed 5-step agent workflow.
+
+```
+User Prompt
+   ↓
+Agent 1: Visual Structurer ──→ VisualCard
+   ↓
+Agent 2: Shader Planner ──→ ShaderPlan
+   ↓
+Tool 1: Reference Selector ──→ 3-5 technique cards
+   ↓
+Agent 3: Code/Patch Agent ──→ GLSL (mainImage)
+   ↓
+Tool 2: Shader Compiler ──→ CompileReport (real WebGL2)
+   ↓
+Tool 3: Screenshot Renderer ──→ Multi-frame PNG
+   ↓
+Output
+```
+
+V1 scope is **minimum viable loop**: input prompt → compileable ShaderToy code + screenshots. Visual aesthetic / auto-repair / RAG / reference image are V2-V5.
 
 ## Quick Start
 
@@ -18,123 +38,140 @@ npm install
 npm run dev        # Start dev server (http://localhost:5173)
 ```
 
+Click the ⚙️ gear in the AI Copilot panel, choose **Mock** for a free zero-config test, or pick OpenAI / DeepSeek / Groq / Together and paste an API key.
+
 ## Commands
 
 ```bash
-npm run dev        # Start Vite dev server
+npm run dev        # Vite dev server
 npm run build      # TypeScript check + production build
 npm run lint       # ESLint (0 errors expected)
-npm run test       # Vitest (75 tests across 8 files)
+npm test           # Vitest (34 tests across 5 files)
 ```
 
 ## AI Provider Setup
 
-1. Click the ⚙️ gear icon in the AI Copilot panel
-2. Select a provider (DeepSeek, OpenAI, Groq, Together)
-3. Enter your API key
-4. Optionally set a custom base URL and model
+ShaderForge ships with a `Mock` provider for zero-config testing.
 
-Or set the `VITE_DEEPSEEK_API_KEY` environment variable for auto-configuration.
+For real LLM usage:
+
+1. Click the ⚙️ gear in the AI Copilot panel.
+2. Select a provider (OpenAI / DeepSeek / Groq / Together).
+3. Paste your API key (stored in `localStorage` — never committed).
+4. Optionally set a custom base URL and model name.
+
+Or set `VITE_OPENAI_API_KEY` / `VITE_DEEPSEEK_API_KEY` etc. in `.env.local` (gitignored).
 
 ## Architecture
 
 ```
 src/
-├── ai/                    # AI service layer
-│   ├── adapter.ts         # Provider interface + intent types
-│   ├── agent-loop.ts      # Retry loop with compile feedback
-│   ├── service.ts         # AIService singleton (orchestrator)
-│   ├── conventions.ts     # System prompt construction
-│   ├── spec/              # ShaderSpec IR (structured prompt representation)
-│   ├── planner/           # TechniquePlan (deterministic spec→technique mapping)
-│   ├── library/           # Golden shader examples (10 curated references)
-│   ├── modify/            # ModifyIntent parsing + strategy derivation
-│   ├── fallback/          # Fallback shaders (8 safe options)
-│   ├── telemetry/         # Render quality analysis + auto-repair
-│   └── providers/         # Mock + OpenAI-compatible providers
-├── components/
-│   ├── AIChat/            # Chat panel for shader generation
-│   ├── Editor/            # Monaco editor with GLSL snippets
-│   ├── Preview/           # WebGL2 shader preview + telemetry
-│   ├── DevTools/          # Dev-only test harness (production-gated)
-│   ├── ErrorBar/          # Compile error display
-│   ├── Settings/          # Provider configuration
-│   └── Toolbar/           # Top toolbar
-├── store/                 # Zustand stores (editor, ai, project, preview, ui)
-├── editor/                # Monaco config (error markers, GLSL snippets, shortcuts)
-├── services/shader/       # Shader compiler, validator, wrapper
-└── utils/                 # debounce, shareUrl
+├── shader-agent/                # V1 harness 核心
+│   ├── schemas/                 # 5 个 V1 schema
+│   │   ├── visual-card.ts
+│   │   ├── shader-plan.ts
+│   │   ├── reference-card.ts
+│   │   ├── compile-report.ts
+│   │   └── shader-result.ts
+│   ├── agents/                  # 3 个 V1 Agent
+│   │   ├── visual-structurer.ts
+│   │   ├── shader-planner.ts
+│   │   └── code-patch-agent.ts
+│   ├── tools/                   # 3 个 V1 Tool
+│   │   ├── reference-selector.ts
+│   │   ├── shader-compiler.ts
+│   │   └── screenshot-renderer.ts
+│   ├── workflows/               # V1 固定 workflow
+│   │   ├── generate-shader.ts
+│   │   └── patch-shader.ts
+│   ├── kb/                      # 9 张 golden shader（V1 起步）
+│   ├── runs/                    # in-memory run artifact store
+│   ├── llm-client.ts            # LLMClient 抽象
+│   ├── presets.ts               # 10 个 starter preset
+│   ├── integration/             # 桥接 aiStore / AIChatPanel
+│   │   ├── service.ts           #   shaderAgent 单例
+│   │   ├── llm-adapters.ts      #   OpenAI-compatible / Mock
+│   │   ├── providers/           #   provider 实现
+│   │   ├── agent-result-adapter.ts
+│   │   └── agent-result-types.ts
+│   └── __tests__/               # 5 文件 / 34 测试
+├── services/
+│   └── shader/                  # 浏览器内 WebGL 编译 + 截图（offscreen-renderer）
+├── components/                  # Preview / Editor / AIChat / Settings / Toolbar / ErrorBar
+├── store/                       # Zustand: editor / ai / project / preview / ui
+├── editor/                      # Monaco config + GLSL snippets
+├── templates/                   # 内置 starter template
+└── utils/                       # debounce / shareUrl
 ```
 
-## AI Pipeline
+## AI Pipeline (V1)
 
-```
-User Prompt → ShaderSpec IR → TechniquePlan → Golden Examples → Agent Loop → GLSL
-                                          ↓
-                                  Modify Intent (modify only)
-                                          ↓
-                                  Modify Strategy
-```
+V1 跑的是**固定 5 步 workflow**，Agent 不允许自由接力。
 
-### Intent Modes
+| Step | Type | What it does |
+|---|---|---|
+| 1 | **Agent** | Visual Structurer — LLM 把 prompt 拆成 structured `VisualCard` (mustHave/avoid/palette/motion/composition) |
+| 2 | **Agent** | Shader Planner — LLM 把 `VisualCard` 拆成 `ShaderPlan` (modules + referenceNeeds) |
+| 3 | **Tool** | Reference Selector — deterministic 选 3-5 张 technique card，fallback 到 9 张 golden shader |
+| 4 | **Agent** | Code/Patch Agent — LLM 生成 Shadertoy `mainImage(out vec4 fragColor, in vec2 fragCoord)` |
+| 5 | **Tool** | Shader Compiler — 浏览器 WebGL2 真实编译，返 `CompileReport` |
+| 6 | **Tool** | Screenshot Renderer — 多帧截图（t=0/1/2/4/8）存到 in-memory run artifact |
+
+V1 compile 失败**不自动 retry**；错误日志进 ErrorBar，用户改 prompt 重跑或手动改 GLSL。V2 才加 2-3 次 retry。
+
+### Intent Modes (V1)
+
+V1 只支持 2 个 intent mode：
 
 | Intent | Description |
-|--------|-------------|
+|---|---|
 | ✨ Create | Generate a new shader from a description |
 | ✏️ Modify | Modify the current shader based on instructions |
-| 🔧 Fix Error | Auto-fix compilation errors |
-| 📖 Explain | Explain how the current shader works |
-| ⚡ Optimize | Optimize shader performance |
 
-### Telemetry Pipeline
+V1 故意砍掉的 mode（V2-V5 才加）：
 
-After AI-generated code compiles successfully:
-
-1. **Pixel capture** — 3 frames analyzed for brightness, contrast, saturation, motion, flicker
-2. **Quality signals** — Deterministic threshold-based signal derivation
-3. **Quality diagnosis** — LLM-based diagnosis with shouldRepair decision
-4. **Repair plan** — LLM-based structured repair plan (only if shouldRepair)
-5. **Auto-repair** — One-shot, low-risk-only repair with safety guards
-
-### codeSource Tracking
-
-| codeSource | Set by | Telemetry | Auto-repair |
-|------------|--------|-----------|-------------|
-| `ai_generation` | `setCodeFromAI()` | ✅ Triggers | ✅ Can apply |
-| `quality_repair` | `setCodeFromRepair()` | ❌ Skipped | ❌ Cannot re-trigger |
-| `manual` | `setCode()` | ❌ Skipped | ❌ Cannot overwrite |
+- ❌ 🔧 Fix Error（V2 才做 auto-repair）
+- ❌ 📖 Explain（V5 才做）
+- ❌ ⚡ Optimize（V5 才做）
 
 ## Testing
 
 ```bash
-npm run test       # Run all 75 tests
+npm test           # 5 files / 34 tests
 ```
 
 Test files cover:
-- `normalizeShaderSpec` — enum validation, numeric clamping, defaults
-- `planTechnique` — scene mapping, effects, loop budget
-- `selectGoldenExamples` — scoring, performance filtering
-- `determineModifyStrategy` — rewrite detection, parameter adjustment
-- `deriveQualitySignals` — all threshold checks
-- `parseQualityDiagnosis` — JSON parsing, fallback defaults
-- `parseQualityRepairPlan` — JSON parsing, no_op fallback
-- `canApplyAutoRepair` — safety guard for repair application
 
-## Dev-Only Test Harness
+- `schemas` — VisualCard / ShaderPlan / CompileReport / ShaderResult validation
+- `agents` — Visual Structurer / Planner / Code Agent schema conformance
+- `workflows` — generate / patch workflow state machine
+- `service` — `shaderAgent` singleton contract
+- `agent-result-adapter` — ShaderResult → AgentResult bridging
 
-In development mode (`npm run dev`), a test harness panel appears in the bottom-right corner:
-
-- **Shader injection** — Inject known shader presets (black screen, low contrast, flickering, colorful)
-- **Repair mode selector** — Control auto-repair behavior (success, invalid, API error, delayed)
-- **Status display** — Shows current codeSource and requestId
-
-All harness code is gated behind `import.meta.env.DEV` and excluded from production builds.
+Browser-side real WebGL2 编译无法在 Vitest 跑，**视觉验证**需要 `npm run dev` 手动看。
 
 ## Conventions
 
-- No unused locals/params (tsconfig `noUnusedLocals` + `noUnusedParameters`)
-- `erasableSyntaxOnly: true` — no runtime enums or namespaces
-- JSX: `react-jsx` transform (no React import needed)
-- CSS: Plain CSS files (`App.css`, `index.css`)
-- Error boundaries wrap each major panel
-- Shadertoy-style `mainImage()` with `iTime`, `iResolution`, `iMouse` uniforms
+- No unused locals/params (`noUnusedLocals` + `noUnusedParameters`).
+- `erasableSyntaxOnly: true` — no runtime enums or namespaces.
+- JSX: `react-jsx` transform (no React import needed).
+- CSS: plain CSS files.
+- Error boundaries wrap each major panel (AI / Editor / Preview).
+- Shadertoy-style `mainImage(out vec4 fragColor, in vec2 fragCoord)` with `iTime` / `iResolution` / `iMouse` uniforms.
+- `.env` / 截图 / 临时文件不进 git（见 `.gitignore`）。
+
+## V1-V5 Roadmap
+
+| 阶段 | 目标 | 状态 |
+|---|---|---|
+| **V1** | 跑通最小闭环 (3 Agents + 3 Tools 固定 workflow) | ✅ Done |
+| **V2** | 编译自动修复（2-3 retry） | ⏳ Next |
+| **V3** | 截图反馈 Patch + Modify Flow | ⏳ Planned |
+| **V4** | Technique Cards 扩到 20-50 张 | ⏳ Planned |
+| **V5** | Mastra / 半 RAG / 视觉评估 | ⏳ Planned |
+
+V1 不偷做 V2-V5 的事；V2-V5 不假装已经在 V1 跑通。
+
+## License
+
+MIT for original code. Third-party shader snippets (e.g. golden shaders) are hand-rewritten from public references and re-released under MIT. No proprietary assets shipped.

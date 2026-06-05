@@ -1,304 +1,231 @@
 # ShaderForge DESIGN.md
 
-## Design Identity
-
-ShaderForge is not a normal code editor.
-
-ShaderForge is an AI-native shader creation studio: a browser-based visual invention machine where users create, modify, critique, debug, and refine GLSL shader art through natural language, reference images, structured intent, visual feedback, and agent loops.
-
-The product should feel like a fusion of:
-
-* Shadertoy,
-* creative coding studio,
-* visual synthesizer,
-* cinematic shader lab,
-* procedural art instrument,
-* AI co-creator workspace,
-* realtime graphics cockpit.
-
-Do not design it as a generic SaaS dashboard, plain Monaco wrapper, ordinary chat app, or developer admin panel.
-
-The interface should make users feel:
-
-> I am not writing code in a box. I am steering light, matter, motion, and mathematics.
-
-## North Star
-
-The goal is not merely valid GLSL.
-
-The goal is visually ambitious, editable, performant, prompt-aligned shader art.
-
-A result is not good enough just because it compiles. A shader must have visual intention.
-
-Every product decision should help users do at least one of these:
-
-* imagine a visual scene,
-* translate language into shader structure,
-* see the output immediately,
-* understand why the result works or fails,
-* refine the visual direction,
-* modify the shader without destroying what already works,
-* learn reusable GLSL techniques,
-* avoid browser-freezing performance traps.
-
-ShaderForge should feel magical, but not opaque.
-It should be spectacular, but still controllable.
-It should be AI-native, but still inspectable.
-
-## Design Anti-Goals
-
-Avoid:
-
-* generic dark developer tool UI,
-* boring black editor plus preview split,
-* plain chat sidebar,
-* low-effort gradient backgrounds,
-* random noise shaders as default output,
-* unstyled Monaco-dominant layout,
-* ordinary “Generate” button workflow,
-* shallow keyword-template UX,
-* visual results judged only by compilation,
-* UI that hides the creative pipeline,
-* UI that makes users feel they are fighting code instead of directing visuals.
-
-Do not make ShaderForge feel like:
-
-* a CRUD app,
-* a prompt box glued to Monaco,
-* a bland AI wrapper,
-* a template gallery with chat,
-* a basic Shadertoy clone.
-
-## Product Personality
-
-ShaderForge should feel:
-
-* electric,
-* cinematic,
-* precise,
-* experimental,
-* technical,
-* premium,
-* strange,
-* powerful,
-* inspectable,
-* high-performance,
-* visually hungry.
-
-Not cute.
-Not corporate.
-Not classroom-simple.
-Not neon chaos without taste.
-
-The ideal mood is:
-
-> a black-glass graphics lab where an AI and a shader artist sculpt procedural worlds together.
-
-## Core Product Surfaces
-
-### 1. Preview
-
-The Preview is the stage. It is the most important surface.
-
-It must feel dominant, alive, and worthy of the generated art.
-
-Requirements:
-
-* large enough to judge composition and motion,
-* visually framed like a render viewport, not a basic iframe,
-* clear play/pause/restart affordance,
-* time and resolution awareness,
-* error state that does not feel like a dead app,
-* screenshot/export-ready presentation later,
-* performance status available without visual clutter.
-
-The Preview should feel like a miniature universe generator.
-
-### 2. Editor
-
-The Editor is the instrument panel.
-
-Monaco should remain powerful, but the interface must not feel like Monaco swallowed the whole product.
-
-Requirements:
-
-* GLSL code must be readable,
-* compile errors must connect to code and preview,
-* generated sections should be understandable,
-* AI modifications should preserve user edits where possible,
-* code should be structured enough for follow-up edits.
-
-The Editor should feel technical and serious, but not visually dead.
-
-### 3. AI Chat
-
-AI Chat is not a support chatbot. It is the creative director interface.
-
-It should help users express visual intent:
-
-* scene,
-* subject,
-* material,
-* color,
-* motion,
-* camera,
-* depth,
-* mood,
-* style,
-* interaction,
-* performance budget,
-* reference image target,
-* modification target.
-
-AI messages should not feel like generic assistant bubbles. They should feel like shader-generation states, creative decisions, and visual critique.
-
-### 4. Pipeline / Agent Loop
-
-The AI pipeline should be visible enough to build trust.
-
-Users should understand whether the system is:
-
-* parsing intent,
-* retrieving shader knowledge,
-* planning GLSL structure,
-* generating code,
-* compiling,
-* repairing errors,
-* checking performance,
-* visually critiquing,
-* refining toward a reference.
-
-This can be shown as subtle pipeline states, not a heavy enterprise workflow diagram.
-
-### 5. Knowledge / RAG
-
-Knowledge is not a boring document search result.
-
-Shader knowledge should feel like a library of visual techniques:
-
-* raymarching,
-* SDFs,
-* volumetric fog,
-* domain repetition,
-* FBM,
-* curl noise,
-* reaction diffusion,
-* palette functions,
-* polar coordinates,
-* camera motion,
-* bloom-like illusions,
-* dithering,
-* fractals,
-* plasma fields,
-* Voronoi cells,
-* signed distance blending,
-* lighting tricks,
-* anti-aliasing patterns.
-
-Retrieved knowledge should appear as creative ammunition, not academic citations.
-
-## Layout Direction
-
-### Desktop Layout
-
-The default layout should support a three-part creative flow:
-
-1. AI intent and creative controls,
-2. shader code editor,
-3. live visual preview.
-
-Recommended modes:
-
-* Split Studio: Chat left, Editor center, Preview right.
-* Visual First: Preview dominant, Editor collapsible, Chat as command rail.
-* Code First: Editor dominant, Preview persistent, Chat compact.
-* Critique Mode: Preview dominant with AI visual analysis and delta list.
-
-The user should be able to feel that ShaderForge is a creation cockpit, not a webpage.
-
-### Panel Behavior
-
-Panels should feel like instruments:
-
-* resizable,
-* collapsible,
-* stateful,
-* visually distinct,
-* not heavy cards,
-* not ordinary admin dashboard panels.
-
-Use subtle borders, glass, scanlines, glow, and shader-inspired materials.
-Do not overload every panel with thick shadows or rounded SaaS card styling.
-
-### Spatial Priority
-
-Priority order:
-
-1. Preview output,
-2. user prompt / creative intent,
-3. compile status / error feedback,
-4. editor code,
-5. settings and metadata.
-
-Do not bury the preview.
-Do not let settings dominate the creative experience.
-
-## Visual Language
+> **V1 范围**：跑通最小闭环（Input prompt → 编译通过 ShaderToy code + 多帧截图）。
+> **V1-V5 roadmap / 验收标准**：[CLAUDE.md](./CLAUDE.md)。
+> **V1 计划原文**：`shader_agent_harness_plan.html`。
+>
+> **V1 设计原则**：先稳定、再聪明；先编译、再审美；先技术卡、再 RAG；先手写 workflow、再 Mastra。
+
+## V1 vs V2-V5 功能矩阵
+
+下面所有功能按 V1 / 后续阶段分级。**V1 范围内的功能必须在 V1 做完；V2-V5 的功能不偷偷做、不假装做了、不糊弄 demo。**
+
+| 阶段 | 状态 | 范围 |
+|---|---|---|
+| **V1** | ✅ Done | Visual Structurer / Planner / Reference Selector / Code Agent / Compiler / Screenshot Renderer；固定 5 步 workflow；9 张 golden shader；in-memory runs |
+| **V2** | ⏳ Next | 编译自动修复（2-3 retry）、CompileReport 接回 Code Agent |
+| **V3** | ⏳ Planned | 截图反馈 Patch、Visual Diff、Modify Flow |
+| **V4** | ⏳ Planned | Technique Cards 扩到 20-50 张、Reference Panel、Technique Inspector |
+| **V5** | ⏳ Planned | Mastra / 半 RAG / 视觉评估、Visual Critique UI、Reference Image Workflow |
+
+## V1 North Star
+
+V1 只关心一件事：
+
+> **Input prompt → 编译通过 ShaderToy code + 多帧截图。**
+
+V1 不关心的事（V2-V5 才做）：
+
+- shader 视觉是否够炫、够艺术、够电影级。
+- 编译失败后自动修复（V1 = 失败就是失败，错误给用户看）。
+- 截图反馈 Patch（V3 才接）。
+- Reference Image 流程（V5 才接）。
+- Visual Critique / 视觉评分（V5 才接）。
+- 自动 refine / 优化（V5 才接）。
+
+V1 抗目标（**别做这些**）：
+
+- **不要做"诗意 prompt 解析器"**。V1 的 VisualCard 字段必须可枚举、可填、不留 vague。
+- **不要做"自动修编译器"**。V1 编译失败就失败，把错误日志抛到 ErrorBar。
+- **不要做"自由对话 AI"**。V1 AI 行为是 workflow 固定的几个步骤，不让 Agent 自由接力。
+- **不要做"视觉评审 / critique 按钮"**。V5 才有。V1 不假装做了。
+- **不要做"参考图上传"**。V5 才有。V1 不假装支持。
+- **不要做"20+ 技术卡选择"**。V4 才有。V1 9 张 golden shader fallback 就够了。
+- **不要做"动态 quality tier / 移动端降级"**。V5 评估。V1 跑得动就行。
+
+## V1 用户路径
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 1. 打开 ShaderForge                                          │
+│    - 看到 Preview（黑屏 / 上次保存的 shader）                  │
+│    - Editor（内置 template）                                  │
+│    - AI Chat（10 个 preset 列表）                             │
+└─────────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────────┐
+│ 2. 在 AI Chat 选 preset 或输入 prompt                         │
+│    - "a black hole in deep space"                            │
+│    - 或 "a violet aurora over a frozen lake"                 │
+└─────────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────────┐
+│ 3. workflow 跑（5 步 + screenshot）                          │
+│    Visual Structurer → Planner → Reference Selector         │
+│    → Code Agent → Compiler → Screenshot Renderer            │
+│    AI Chat 显示每步状态卡                                     │
+└─────────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────────┐
+│ 4. 结果分支                                                  │
+│    ✅ 编译成功：                                              │
+│       - Editor 填入 GLSL                                     │
+│       - Preview 显示                                         │
+│       - Run artifact 存到内存（V1 暂不落盘）                  │
+│    ❌ 编译失败：                                              │
+│       - Editor 顶部 ErrorBar 显示错误                         │
+│       - AI Chat 显示 CompileReport（不自动 retry）            │
+│       - 用户可改 prompt 重跑 / 手动改 GLSL                    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## V1 UI Surfaces
+
+| Surface | V1 状态 | 不做（V2-V5） |
+|---|---|---|
+| Toolbar | New / Save(URL) / Share / Settings | — |
+| Preview | WebGL 实时渲染；编译失败显示红色错误 | 动态 quality tier |
+| Editor | Monaco + GLSL snippets；compile error markers；AI 改后 jump-to-line | 区域 diff 高亮 |
+| AI Chat | Prompt input + 10 preset + 步骤状态卡 + screenshot 缩略图 | visual critique / modify flow |
+| Settings | Provider（Mock / OpenAI / DeepSeek / Groq / Together）+ API key（localStorage） | 高级 prompt 模板 |
+| Error Bar | 编译错误显示（带行号） | AI 自动修复建议（V2） |
+| Pipeline Status | 5 步状态点（不强制显眼） | 步骤内多 sub-step（V5） |
+
+**V1 明确不做的 surface**：
+
+- ❌ Reference Panel（V4）
+- ❌ Technique Inspector（V4）
+- ❌ Visual Critique UI（V5）
+- ❌ Modify Flow 入口（V3）
+- ❌ Reference Image Upload（V5）
+- ❌ Performance Overlay（V5）
+
+## V1 Visual Quality Bar
+
+即使 V1 是"最小闭环"，每个生成的 shader 仍应满足：
+
+| 指标 | V1 阈值 |
+|---|---|
+| 编译 | 真过 WebGL2 编译，无 error |
+| 非黑屏 | PNG 输出不全黑 / 不全白（avg luma 0.05-0.95） |
+| 有结构 | 大色块 / 明显几何 / 噪点 / 流动之一 |
+| Prompt 对齐 | black hole prompt 出黑洞形，volcano prompt 出岩浆色 |
+| 动起来 | 用了 `iTime` / `iFrame`，不是静态图 |
+
+**V1 不要求**：
+
+- ❌ 电影级光影
+- ❌ 复杂 raymarching（>128 steps）
+- ❌ 多 pass / multi-buffer / FBO
+- ❌ 高分细节（>2K 分辨率）
+- ❌ 用户级可定制 quality tier
+
+## V1 Aesthetic Categories (9 golden shaders)
+
+V1 内置 9 个 golden shader 覆盖基础审美。V4 才扩：
+
+| 类别 | 示例 prompt | 核心 technique |
+|---|---|---|
+| **Cosmic** | black hole, nebula, deep space | polar / radial / lensing |
+| **Organic** | cell, liquid, smoke | FBM / domain warp |
+| **Geometric** | fractal, polygon, voronoi | SDF / symmetry |
+| **Liquid** | ink, mercury, water | noise advection / ripple |
+| **Fire** | flame, magma, ember | FBM / temporal warp |
+| **Aurora** | ribbon, wave, glow | polar / sin / cosine |
+| **Crystalline** | gem, glass, prism | SDF / fresnel |
+| **Plasma** | field, energy, plasma | sin / cos / hue rotate |
+| **Terrain** | mountain, valley, fbm | height field / iso-line |
+
+V4 扩到 20-50 张时再细分（如 Cosmic → BlackHole / Nebula / StarField / Galaxy）。
+
+## V1 Workflow 行为
+
+### Generator flow (User → Compile → Screenshot)
+
+```
+prompt
+  → Visual Structurer (LLM, 1 次)
+  → Shader Planner (LLM, 1 次)
+  → Reference Selector (deterministic, 0-2 golden fallback)
+  → Code Agent (LLM, 1 次)
+  → Shader Compiler (WebGL2 real, 1 次)
+  → Screenshot Renderer (real, multi-frame: t=0/1/2/4/8)
+  → Result (compile status + visualCard + shaderPlan + code + compileReport + screenshots)
+```
+
+### Patch flow (Compile error → Code)
+
+V1 = 简单的 `prompt + error + previousCode` 重写，**只跑 1 次**，不 retry。
+
+V2 才是 2-3 次 retry loop。
+
+## V1 Anti-Goals (再次强调)
+
+| 不做 | 原因 |
+|---|---|
+| Keyword 主路解析 | V1 plan：Visual Structurer 走 LLM；keyword 仅作 fallback / 守卫 |
+| Agent 自由接力 | V1 plan：workflow 强制调用 |
+| 自动 fix compile | V2 才做 |
+| 视觉评分 / critique | V5 才做 |
+| 20+ technique cards | V4 才做 |
+| Mastra / 半 RAG | V5 才做 |
+| Reference Image 流程 | V5 才做 |
+| 动态 quality tier | V5 才做 |
+
+## Design Language (V1 仍然适用)
+
+> 即使 V1 scope 缩小，V1 的**视觉设计语言**（material / color / typography / motion）依旧要保持。下面这些不依赖功能 scope。
 
 ### Materials
 
-Preferred materials:
-
-* black glass,
-* graphite metal,
-* deep blue-black panels,
-* smoked transparent overlays,
-* spectral edge highlights,
-* thin neon wires,
-* cool cyan diagnostics,
-* magenta/purple creative accents,
-* amber warnings,
-* red error fracture states,
-* procedural grain,
-* subtle scanline texture,
-* shader-grid overlays,
-* floating vector marks.
-
-Use these as materials, not decoration.
+- black glass
+- graphite metal
+- deep blue-black panels
+- smoked transparent overlays
+- spectral edge highlights
+- thin neon wires
+- cool cyan diagnostics
+- magenta/purple creative accents
+- amber warnings
+- red error fracture states
+- procedural grain
+- subtle scanline texture
+- shader-grid overlays
+- floating vector marks
 
 ### Surface Style
 
 The app background should feel like a dark graphics laboratory:
 
-* not pure black,
-* not flat gray,
-* not generic Tailwind dark mode,
-* layered depth,
-* faint grid,
-* subtle noise,
-* ambient glow from preview,
-* gentle vignette,
-* focus drawn toward shader output.
+- not pure black
+- not flat gray
+- not generic Tailwind dark mode
+- layered depth
+- faint grid
+- subtle noise
+- ambient glow from preview
+- gentle vignette
+- focus drawn toward shader output
 
 ### Shape Language
 
 Use:
 
-* sharp technical panels,
-* small radius for controls,
-* medium radius for larger glass surfaces,
-* thin hairline borders,
-* precise alignment,
-* compact dense controls,
-* high-information visual hierarchy.
+- sharp technical panels
+- small radius for controls
+- medium radius for larger glass surfaces
+- thin hairline borders
+- precise alignment
+- compact dense controls
+- high-information visual hierarchy
 
 Avoid:
 
-* oversized rounded cards,
-* bubbly consumer UI,
-* pastel SaaS panels,
-* generic pricing-page geometry,
-* soft toy-like shadows.
+- oversized rounded cards
+- bubbly consumer UI
+- pastel SaaS panels
+- generic pricing-page geometry
+- soft toy-like shadows
 
 ### Glow Rules
 
@@ -306,105 +233,59 @@ Glow must communicate state.
 
 Good glow:
 
-* preview active state,
-* AI thinking,
-* compile success,
-* selected visual technique,
-* live uniform interaction,
-* reference match focus,
-* node in creative pipeline.
+- preview active state
+- AI thinking
+- compile success
+- selected visual technique
+- live uniform interaction
+- reference match focus
+- node in creative pipeline
 
 Bad glow:
 
-* random neon decoration,
-* thick saturated outlines,
-* glow behind long text,
-* high-contrast flicker.
+- random neon decoration
+- thick saturated outlines
+- glow behind long text
+- high-contrast flicker
 
 ## Color System
 
-ShaderForge should use a dark technical base with spectral accents.
+| Token | Use |
+|---|---|
+| `void-black` | app background (near-black, not pure black) |
+| `graphite` | panel background |
+| `deep-navy` | secondary surface |
+| `smoked-glass` | translucent overlay |
+| `cool-cyan` | diagnostics / runtime / grid |
+| `electric-violet` | AI generation / creative intent |
+| `deep-magenta` | style energy / aesthetic emphasis |
+| `amber` | warning / performance caution / ambiguity |
+| `fracture-red` | compile error / shader failure |
+| `soft-white` | primary text |
+| `steel-gray` | secondary text |
+| `muted-blue-gray` | metadata / disabled |
 
-### Core Palette
-
-* Void Black: near-black base, not pure black.
-* Graphite: panel background.
-* Deep Navy: secondary surface.
-* Smoked Glass: translucent overlay.
-* Cool Cyan: diagnostics, active runtime, coordinate/grid language.
-* Electric Violet: AI generation, creative intent, magic state.
-* Deep Magenta: style energy, aesthetic emphasis.
-* Amber: warning, performance caution, ambiguity.
-* Fracture Red: compile error, shader failure.
-* Soft White: primary text.
-* Steel Gray: secondary text.
-* Muted Blue Gray: metadata, disabled state.
-
-### Color Usage
-
-* Cyan = technical/runtime truth.
-* Violet = AI creative energy.
-* Magenta = visual intensity/style.
-* Amber = caution/performance/ambiguity.
-* Red = compile/runtime failure.
-* Green should be used sparingly for success, not as a default brand color.
-
-### Avoid
-
-* generic blue primary everywhere,
-* corporate purple CTA language,
-* pastel productivity colors,
-* flat black-and-white code editor look,
-* random rainbow gradients unless the shader concept demands it.
+**Color usage rule**: Cyan = technical / runtime truth. Violet = AI creative energy. Magenta = visual intensity / style. Amber = caution / performance / ambiguity. Red = compile / runtime failure. Green is for success only (not default brand).
 
 ## Typography
 
 ### Product UI
 
-Use a clean technical sans-serif.
-
-Preferred feel:
-
-* compact,
-* precise,
-* readable,
-* slightly futuristic,
-* not playful.
-
-Use for:
-
-* controls,
-* chat,
-* panels,
-* labels,
-* buttons,
-* pipeline states.
+- clean technical sans-serif
+- compact, precise, readable, slightly futuristic, not playful
+- for: controls, chat, panels, labels, buttons, pipeline states
 
 ### Code
 
-Code typography must remain excellent.
-
-Requirements:
-
-* clear GLSL symbols,
-* readable punctuation,
-* good line-height,
-* no cramped editor density,
-* errors easy to scan.
+- excellent GLSL typography
+- clear GLSL symbols, readable punctuation
+- good line-height, no cramped editor density
+- errors easy to scan
 
 ### Numeric / Runtime Data
 
-Use tabular numbers where possible for:
-
-* FPS,
-* resolution,
-* compile attempt,
-* token count,
-* raymarch steps,
-* uniform values,
-* performance budget.
-
-Runtime data should feel like instrumentation.
+- tabular numbers for: FPS, resolution, compile attempt, token count, raymarch steps, uniform values, performance budget
+- runtime data should feel like instrumentation
 
 ## Motion System
 
@@ -412,812 +293,134 @@ Motion should feel like realtime graphics, not web animation stickers.
 
 ### Motion Principles
 
-* motion reveals state,
-* transitions should feel responsive,
-* no toy bouncing,
-* no random floating UI,
-* no constant distraction near code,
-* preview remains king.
+- motion reveals state
+- transitions should feel responsive
+- no toy bouncing
+- no random floating UI
+- no constant distraction near code
+- preview remains king
 
 ### Motion Types
 
 Use:
 
-* subtle scanline drift,
-* panel glass refraction,
-* AI pulse while generating,
-* compile error fracture,
-* code-to-preview connection trace,
-* reference match overlay sweep,
-* shader technique node activation,
-* pipeline step glow,
-* uniform interaction ripple,
-* performance danger flicker.
+- subtle scanline drift
+- panel glass refraction
+- AI pulse while generating
+- compile error fracture
+- code-to-preview connection trace
+- reference match overlay sweep
+- shader technique node activation
+- pipeline step glow
+- uniform interaction ripple
+- performance danger flicker
 
 ### Timing
 
-* micro interaction: 80ms–160ms,
-* panel reveal: 120ms–240ms,
-* AI state transition: 250ms–600ms,
-* compile repair loop: 300ms–800ms,
-* visual critique sweep: 600ms–1200ms,
-* major mode transition: 500ms–1000ms.
-
-Prefer crisp and physical over slow and decorative.
-
-## Shader Output Quality Bar
-
-A generated shader is good only if it satisfies more than compilation.
-
-Evaluate using:
-
-### 1. Prompt Alignment
-
-Does it match the requested subject, mood, palette, motion, and style?
-
-### 2. Composition
-
-Is there a clear visual structure?
-
-Look for:
-
-* focal point,
-* balance,
-* framing,
-* scale,
-* readable silhouette,
-* intentional empty space.
-
-### 3. Depth
-
-Does it feel spatial?
-
-Depth can come from:
-
-* raymarching,
-* parallax,
-* fog,
-* size falloff,
-* lighting,
-* layered particles,
-* camera movement,
-* volumetric effects.
-
-### 4. Color Harmony
-
-Are the colors intentional?
-
-Avoid default rainbow chaos unless requested.
-Prefer controlled palettes with contrast, accent, temperature, and mood.
-
-### 5. Motion Quality
-
-Does animation feel alive?
-
-Good motion has rhythm, easing, flow, orbit, turbulence, drift, pulse, or physical behavior.
-Bad motion is random jitter, uniform spinning, or noise flicker.
-
-### 6. Material Richness
-
-Does it look like something?
-
-Possible materials:
-
-* plasma,
-* nebula,
-* glass,
-* liquid metal,
-* smoke,
-* fire,
-* crystal,
-* membrane,
-* ink,
-* energy field,
-* black hole,
-* ocean,
-* biological tissue,
-* hologram,
-* fractal architecture.
-
-### 7. Procedural Detail
-
-Does it have layered detail without becoming visual mud?
-
-Use:
-
-* FBM,
-* domain warping,
-* Voronoi,
-* SDF blending,
-* noise layering,
-* polar transforms,
-* normal approximation,
-* fake bloom,
-* dithering,
-* gamma correction.
-
-### 8. Editability
-
-Can the shader be modified later?
-
-Prefer organized helper functions and meaningful constants over monolithic unreadable code.
-
-### 9. Performance Safety
-
-Does it avoid freezing the browser?
-
-Visual ambition must include performance discipline.
-
-### 10. Distinctiveness
-
-Does it avoid looking like the same template every time?
-
-Repeated output patterns are product failure.
-
-## Generation Experience
-
-The generation flow should feel like a creative process.
-
-Preferred flow:
-
-1. user prompt,
-2. structured intent,
-3. creative shader plan,
-4. GLSL generation,
-5. compile check,
-6. automatic repair,
-7. performance risk check,
-8. visual critique when image/screenshot is available,
-9. refinement,
-10. final shader with explanation and editable direction.
-
-Do not treat “generate code once” as the final experience.
-
-## Intent and Spec Design
-
-Natural language must become structured visual intent.
-
-A good ShaderSpec should capture:
-
-* scene,
-* subject,
-* mood,
-* palette,
-* motion,
-* material,
-* camera,
-* composition,
-* depth,
-* lighting,
-* interaction,
-* complexity,
-* performance budget,
-* reference image constraints,
-* preserve/change targets for modification.
-
-Do not use keyword matching as the main product brain.
-
-Keyword rules are allowed only for:
-
-* fallback,
-* validation,
-* safety,
-* deterministic guardrails,
-* regression tests.
-
-## Modify Flow
-
-Modification is as important as creation.
-
-When user asks to modify a shader, the UI and AI should identify:
-
-* what to preserve,
-* what to change,
-* where in the code it likely lives,
-* what visual delta is expected,
-* whether the request affects palette, motion, camera, material, geometry, interaction, or performance.
-
-Examples:
-
-* “make it more cosmic” should not just add purple.
-* “more depth” should affect camera, fog, parallax, or raymarch structure.
-* “more like black hole” should affect lensing, accretion disk, radial distortion, gravitational composition.
-* “less chaotic” should reduce noise frequency, motion speed, contrast, or particle density.
-
-## Reference Image Workflow
-
-When a user provides a reference image, the design goal is not vague similarity.
-
-The system should extract:
-
-* composition,
-* subject,
-* silhouette,
-* color palette,
-* lighting,
-* depth,
-* texture,
-* material,
-* motion implication,
-* shader techniques needed,
-* artifacts to avoid.
-
-The generated shader should then be judged against the reference using concrete visual deltas:
-
-* shape mismatch,
-* color mismatch,
-* depth mismatch,
-* motion mismatch,
-* material mismatch,
-* scale mismatch,
-* missing focal point,
-* incorrect glow or contrast,
-* lack of atmospheric density.
-
-Do not guess reference image contents outside the approved vision workflow.
-
-## Visual Critique UI
-
-A visual critique should not be a wall of prose.
-
-It should be structured as:
-
-* What works,
-* What fails,
-* Why it fails,
-* Exact shader techniques to adjust,
-* Priority order,
-* Expected visual delta.
-
-For example:
-
-* increase radial density near center,
-* lower star noise brightness,
-* add lensing distortion,
-* introduce polar disk structure,
-* reduce high-frequency flicker,
-* add volumetric falloff,
-* shift palette from flat blue to cyan-violet-black.
-
-Critique must lead to action.
-
-## Error and Repair Design
-
-Errors should feel like part of the creative instrument, not a crash.
-
-### Compile Error
-
-Visual treatment:
-
-* red fracture line,
-* editor marker,
-* concise explanation,
-* repair action,
-* affected line focus.
-
-### Runtime Failure
-
-Visual treatment:
-
-* preview safe fallback,
-* warning surface,
-* shader paused if needed,
-* performance note.
-
-### AI Repair
-
-Repair state should show:
-
-* attempt number,
-* error reason,
-* what is being changed,
-* whether visual intent is preserved.
-
-Avoid generic “Something went wrong.”
-
-## Performance Design
-
-Performance is a design concern.
-
-The UI should eventually communicate:
-
-* FPS,
-* resolution,
-* quality tier,
-* heavy loop risk,
-* raymarch step estimate,
-* mobile risk,
-* browser freeze danger.
-
-Expensive beauty is allowed, but it must be controlled.
-
-Preferred performance strategies:
-
-* quality tiers,
-* capped iterations,
-* dynamic resolution,
-* preview pause,
-* safe mode,
-* lower-power fallback,
-* warning before dangerous code,
-* preserve visual style with cheaper approximations.
-
-## Component Direction
-
-### App Shell
-
-Dark technical cockpit.
-
-Features:
-
-* preview-centered layout,
-* panel resizing,
-* mode switching,
-* minimal chrome,
-* strong focus on generated art.
-
-### Preview Panel
-
-Visual stage.
-
-Features:
-
-* high-priority space,
-* live shader output,
-* runtime overlay,
-* screenshot/export affordance later,
-* safe fallback state,
-* performance display.
-
-### Editor Panel
-
-Code instrument.
-
-Features:
-
-* Monaco editor,
-* GLSL-aware snippets,
-* clear error markers,
-* AI-changed region awareness later,
-* preserve user control.
-
-### AI Chat Panel
-
-Creative command rail.
-
-Features:
-
-* prompt input,
-* intent summary,
-* generation state,
-* modify actions,
-* follow-up suggestions,
-* critique summaries,
-* reference image state.
-
-### Pipeline Status
-
-Subtle but visible.
-
-States:
-
-* parsing intent,
-* retrieving knowledge,
-* planning,
-* generating,
-* compiling,
-* repairing,
-* checking performance,
-* critiquing,
-* refining,
-* ready.
-
-### Technique Inspector
-
-Future direction.
-
-Displays detected or used techniques:
-
-* raymarch,
-* SDF,
-* FBM,
-* domain warp,
-* Voronoi,
-* particles,
-* palette function,
-* camera orbit,
-* bloom approximation,
-* distortion.
-
-### Reference Panel
-
-Future direction.
-
-Displays:
-
-* reference image,
-* extracted visual spec,
-* similarity deltas,
-* next refinements.
-
-## Empty States
-
-Empty states should inspire creation, not look blank.
-
-Good empty states:
-
-* “Describe a world made of light, fog, metal, water, stars, or impossible geometry.”
-* example prompt chips by visual category,
-* animated but lightweight procedural background,
-* starter scenes.
-
-Avoid:
-
-* “No data yet,”
-* plain blank editor,
-* generic onboarding cards.
-
-## Prompt Starters
-
-Use prompt examples that encourage visual ambition:
-
-* “A black hole with a violet accretion disk, gravitational lensing, and drifting star dust.”
-* “Liquid chrome flowers blooming in a dark glass room.”
-* “A deep ocean nebula made of cyan fog, glowing particles, and slow camera drift.”
-* “A living circuit board where electric veins pulse through black metal.”
-* “A soft aurora ribbon twisting over an alien mountain silhouette.”
-* “A crystalline tunnel with recursive reflections and blue-magenta light.”
-
-Avoid boring examples:
-
-* “make a gradient,”
-* “add noise,”
-* “draw a circle,”
-* “blue animation.”
-
-## Interaction Design
-
-### Generate
-
-Should feel like starting a visual experiment.
-
-Feedback:
-
-* AI creative energy,
-* pipeline progress,
-* preview anticipation,
-* no fake instant magic if process has steps.
-
-### Modify
-
-Should feel surgical and visual.
-
-The UI should preserve context:
-
-* previous shader,
-* requested change,
-* expected visual delta,
-* modified regions if possible.
-
-### Fix
-
-Should feel technical and trustworthy.
-
-Focus on:
-
-* compile error,
-* broken line,
-* repair reason,
-* retry result.
-
-### Explain
-
-Should teach shader thinking.
-
-Good explanation:
-
-* visual idea,
-* GLSL structure,
-* key functions,
-* animation logic,
-* performance risks,
-* how to modify.
-
-Bad explanation:
-
-* generic code summary,
-* tutorial fluff,
-* unexplained math dump.
-
-### Optimize
-
-Should preserve appearance whenever possible.
-
-Optimization should report:
-
-* what changed,
-* what visual quality was preserved,
-* what quality may be reduced,
-* expected performance improvement.
-
-## RAG and Knowledge Design
-
-RAG should not feel like document search.
-
-It should feel like the AI is drawing from a shader spellbook.
-
-Knowledge results should be translated into usable creative techniques:
-
-* “Use polar coordinates for accretion disk structure.”
-* “Use FBM with domain warp for nebula density.”
-* “Use signed distance fields for crisp procedural geometry.”
-* “Use exponential falloff for glow.”
-* “Use normal approximation for lighting.”
-* “Use capped raymarch steps for performance.”
-
-Do not show raw knowledge unless it helps the user.
-
-## Aesthetic Categories
-
-ShaderForge should support strong visual categories:
-
-### Cosmic
-
-Black holes, nebulae, star fields, gravitational lensing, accretion disks, galaxies, cosmic dust.
-
-Techniques:
-
-* polar coordinates,
-* radial distortion,
-* FBM density,
-* raymarch fog,
-* star hash,
-* lensing approximation.
-
-### Liquid
-
-Ink, water, plasma, mercury, lava, membrane, fluid fields.
-
-Techniques:
-
-* domain warp,
-* noise advection,
-* normal perturbation,
-* ripple functions,
-* smoothstep layering.
-
-### Crystalline
-
-Gems, glass tunnels, faceted light, holographic prisms.
-
-Techniques:
-
-* SDF repetition,
-* sharp normals,
-* Fresnel-like edge glow,
-* palette splitting,
-* angular symmetry.
-
-### Biological
-
-Cells, veins, tissue, organic membranes, spores, growth fields.
-
-Techniques:
-
-* Voronoi,
-* reaction-diffusion-inspired patterns,
-* branching noise,
-* soft pulsing,
-* organic color gradients.
-
-### Architectural
-
-Infinite corridors, impossible rooms, sci-fi structures, recursive spaces.
-
-Techniques:
-
-* raymarching,
-* domain repetition,
-* SDF boxes,
-* camera path,
-* fog depth.
-
-### Energy
-
-Lightning, fields, aura, particles, magnetic flow, plasma ribbons.
-
-Techniques:
-
-* curl-like noise,
-* line fields,
-* additive glow,
-* particle hashes,
-* temporal modulation.
-
-## Quality Rubric
-
-When reviewing the product or shader output, use this scorecard:
-
-| Area             | Excellent                              | Weak                     |
-| ---------------- | -------------------------------------- | ------------------------ |
-| Prompt alignment | Matches subject, mood, motion, palette | Only loosely related     |
-| Composition      | Clear focal point and depth            | Random full-screen noise |
-| Motion           | Purposeful, rhythmic, alive            | Jitter, spin, flicker    |
-| Color            | Controlled, mood-specific              | Default rainbow or muddy |
-| Material         | Feels like a thing                     | Abstract mush            |
-| Detail           | Layered and intentional                | Flat or noisy            |
-| Performance      | Stable and bounded                     | Freezes or stutters      |
-| Editability      | Organized, modifiable                  | Monolithic code blob     |
-| Originality      | Distinct visual identity               | Template repetition      |
-| UX               | Creative flow is clear                 | User feels lost          |
-
-## Visual QA Expectations
-
-For any serious visual feature, verify through at least one of:
-
-* live preview inspection,
-* screenshot comparison,
-* vision-agent critique,
-* shader compile result,
-* performance check,
-* dedicated demo route or state,
-* manual reproduction steps.
-
-Do not claim visual success without a way to see or evaluate it.
-
-## Design Modes
-
-### Creation Mode
-
-User is generating from scratch.
-
-Prioritize:
-
-* prompt input,
-* intent understanding,
-* preview anticipation,
-* pipeline status,
-* generated visual quality.
-
-### Refinement Mode
-
-User is improving output.
-
-Prioritize:
-
-* preserve current good parts,
-* visual delta clarity,
-* comparison,
-* fast iteration,
-* modification target.
-
-### Debug Mode
-
-User is fixing broken shader.
-
-Prioritize:
-
-* compile error clarity,
-* line-level focus,
-* safe repair,
-* minimal visual disruption.
-
-### Critique Mode
-
-User wants better aesthetics.
-
-Prioritize:
-
-* reference or output analysis,
-* concrete visual flaws,
-* ranked fixes,
-* shader technique recommendations.
-
-### Learning Mode
-
-User wants explanation.
-
-Prioritize:
-
-* visual idea,
-* math intuition,
-* code structure,
-* editable parameters,
-* common pitfalls.
-
-## Accessibility and Usability
-
-Even a wild shader studio must remain usable.
-
-Requirements:
-
-* readable contrast,
-* keyboard-friendly controls,
-* clear focus states,
-* safe preview fallback,
-* reduced-motion preference respected for UI animation,
-* errors readable without color alone,
-* no essential control hidden behind hover only,
-* avoid text over busy preview without dark scrim.
-
-## Implementation Guidance
-
-Prefer design primitives that scale:
-
-* theme tokens,
-* status tokens,
-* panel primitives,
-* preview overlay primitives,
-* pipeline state components,
-* shader quality metadata,
-* visual critique structures,
-* reusable prompt chips,
-* technique tags,
-* performance indicators.
-
-Avoid:
-
-* one-off visual hacks,
-* CSS decorations unrelated to state,
-* hardcoded prompts scattered in components,
-* fake pipeline states,
-* fake quality scoring,
-* components that cannot survive future agent loop upgrades.
-
-## When Full Design Is Too Large
-
-If a complete feature is too large, implement:
-
-* the correct state model,
-* the visible prototype,
-* the demo path,
-* the fallback,
-* the next-step marker.
-
-Do not reduce ambitious features into bland UI.
-
-Example:
-
-Instead of a fake “Visual Critique” button that only opens text, create a critique panel structure with sections for composition, color, motion, material, performance, and concrete GLSL fixes, even if the first data source is mocked or manually triggered.
-
-## Do
-
-* make Preview visually dominant,
-* make AI feel like a creative collaborator,
-* expose pipeline state enough to build trust,
-* judge shader quality visually, not only technically,
-* preserve performance safety,
-* support reference-driven creation,
-* make modifications preserve what works,
-* create high-impact prompt examples,
-* use dark technical beauty,
-* make the app feel like a creative graphics instrument.
-
-## Don’t
-
-* make it a plain Monaco editor with chat,
-* make it a generic dashboard,
-* celebrate compile success as final success,
-* use keyword matching as the main brain,
-* generate the same noise field repeatedly,
-* hide visual critique,
-* ignore reference images,
-* let performance hazards freeze the browser,
-* overuse corporate SaaS cards,
-* replace creative ambition with “simple enough.”
-
-## Definition of Visual Done
-
-A design or visual task is done only when:
-
-* it improves the creative shader workflow,
-* it is visible in the app or clearly testable,
-* it supports prompt-to-visual creation,
-* it respects performance safety,
-* it avoids generic UI patterns,
-* it helps users create, refine, understand, or judge shader art,
-* and it moves ShaderForge closer to an AI-native visual creation studio.
-
-The target is not “clean UI.”
-
-The target is a machine for making impossible light.
+| Type | Duration |
+|---|---|
+| micro interaction | 80ms–160ms |
+| panel reveal | 120ms–240ms |
+| AI state transition | 250ms–600ms |
+| compile repair loop (V2) | 300ms–800ms |
+| visual critique sweep (V5) | 600ms–1200ms |
+| major mode transition | 500ms–1000ms |
+
+V1 只用前 3 个 timing；V2-V5 的 timing 等到对应阶段再加。
+
+## Shader Output Quality Rubric (V1 简化版)
+
+> 全量 rubric 见 V5 阶段补全；V1 只关注能跑通的部分。
+
+| Area | V1 阈值 | Excellent |
+|---|---|---|
+| Prompt alignment | Subject + mood 对得上 | Subject + mood + palette + motion + style 全对 |
+| Composition | 大色块 / 明显几何 | Focal point + balance + framing + scale |
+| Depth | 至少有一种（颜色 / 形状） | Raymarch / parallax / fog / volumetric |
+| Color harmony | 不全黑 / 不全白 | Controlled palette + contrast + accent + mood |
+| Motion quality | 用了 iTime | Rhythm + easing + flow + physical behavior |
+| Material richness | 不抽象 mush | Plasma / nebula / glass / liquid metal / fire / crystal / ... |
+| Procedural detail | 至少一种 noise | FBM + domain warp + Voronoi + SDF + ... |
+| Editability | 至少 2 个 helper function | Organized + meaningful constants + section comments |
+| Performance safety | 编译能过 | Stable + bounded + no freeze |
+| Distinctiveness | 不重复同 template | Strong visual identity + variation |
+
+**V1 验收只看前 5 项 + Performance safety**。其他是 V5 quality bar。
+
+## Performance & Safety (V1 hard constraint)
+
+V1 也得防止浏览器冻结：
+
+- 编译失败时 preview 显示红色错误，**不静默**。
+- Code Agent 输出若有 `for(;;)` / `while(1)` / `while(true)` 倾向，shader-compiler 应优先拒绝（V1 简单字符串 scan；V2 加更严格 lint guard）。
+- API key 在 localStorage / Settings 面板；**不进 URL share state**。
+- V1 不做动态 quality tier — 跑得动就跑，跑不动让用户改 prompt。
+
+## Quality Rubric (Product / UX 端)
+
+| Area | Excellent | Weak |
+|---|---|---|
+| UX | Creative flow is clear | User feels lost |
+| Performance | Stable and bounded | Freezes or stutters |
+| Editability | Organized, modifiable | Monolithic code blob |
+
+V1 重点保证 **UX 清晰 + 性能不冻结**。"Editability 优雅" 留给 V3+ Modify Flow。
+
+## Accessibility & Usability
+
+即使 V1 scope 小，也得可用：
+
+- readable contrast
+- keyboard-friendly controls
+- clear focus states
+- safe preview fallback（编译失败时 preview 不崩）
+- reduced-motion preference respected for UI animation
+- errors readable without color alone（不只用红色）
+- no essential control hidden behind hover only
+- avoid text over busy preview without dark scrim
+
+## V1 Prompt Starters (10 个)
+
+```
+1. "A black hole with violet accretion disk, gravitational lensing, drifting star dust"
+2. "Liquid chrome flowers blooming in a dark glass room"
+3. "Deep ocean nebula made of cyan fog, glowing particles, slow camera drift"
+4. "Living circuit board where electric veins pulse through black metal"
+5. "Soft aurora ribbon twisting over alien mountain silhouette"
+6. "Crystalline tunnel with recursive reflections and blue-magenta light"
+7. "Volcanic eruption with magma rivers and ember particles"
+8. "Fractal kaleidoscope rotating through magenta and cyan"
+9. "Solar flare with ribbon-like plasma and gold-red gradient"
+10. "Geometric tessellation of glowing hexagons pulsing in sync"
+```
+
+这些是 10 个 starter preset，**用 `presets.ts`**。修改 starter 不算 V1 scope 改动。
+
+## V1 Definition of Done
+
+设计 / 视觉任务的 V1 done 条件：
+
+1. 3 Agents + 3 Tools 都按 V1 范围跑通，**不过度实现**。
+2. 编译能过，截图能出。
+3. UI surface 严格控制在 V1 表格内（不偷偷加 Reference Panel / Critique 按钮）。
+4. V2-V5 特性显式标记为 future，**不在 V1 假装做**。
+5. 视觉 quality bar 满足"可编译 / 非黑屏 / 有结构 / 对齐 prompt / 动起来"。
+6. UI 视觉语言（material / color / typography / motion）保持 DESIGN.md 描述的设计 token。
+7. Performance / safety 不松绑。
+
+**V1 done ≠ 完美 shader**。V1 done = **跑通最小闭环、清晰区分未来阶段、不糊弄 demo**。
+
+---
+
+## 未来阶段（不在 V1 做）
+
+下面这些是 V1 plan 标记的 future 阶段。**V1 不假装做了这些**；做的时候单独起 plan：
+
+| 阶段 | 关键特性 | 涉及 surface |
+|---|---|---|
+| V2 | Compile auto-fix (2-3 retry) | AI Chat + ErrorBar |
+| V3 | Screenshot feedback patch | AI Chat + Preview |
+| V4 | 20-50 technique cards | Reference Panel + Technique Inspector |
+| V5 | Mastra / 半 RAG / 视觉评估 | 全 surface |
+
+RAG、Reference Image、Visual Critique、Modify Flow、Auto-Optimize、Quality Tier — **都明确推到 V2-V5**。
