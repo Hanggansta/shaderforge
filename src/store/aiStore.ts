@@ -6,6 +6,11 @@ const DEFAULT_CANDIDATE_COUNT = 1;
 const MIN_CANDIDATE_COUNT = 1;
 const MAX_CANDIDATE_COUNT = 3;
 
+const MAX_ATTEMPTS_KEY = 'shaderforge-ai-max-attempts';
+const DEFAULT_MAX_ATTEMPTS = 3;
+const MIN_MAX_ATTEMPTS = 1;
+const MAX_MAX_ATTEMPTS = 5;
+
 function loadCandidateCount(): number {
   try {
     const stored = localStorage.getItem(CANDIDATE_COUNT_KEY);
@@ -25,6 +30,31 @@ function persistCandidateCount(count: number): void {
     // ignore quota / disabled storage
   }
 }
+
+export function clampMaxAttempts(value: number): number {
+  if (Number.isNaN(value)) return DEFAULT_MAX_ATTEMPTS;
+  return Math.min(MAX_MAX_ATTEMPTS, Math.max(MIN_MAX_ATTEMPTS, Math.floor(value)));
+}
+
+function loadMaxAttempts(): number {
+  try {
+    const stored = localStorage.getItem(MAX_ATTEMPTS_KEY);
+    if (!stored) return DEFAULT_MAX_ATTEMPTS;
+    return clampMaxAttempts(Number.parseInt(stored, 10));
+  } catch {
+    return DEFAULT_MAX_ATTEMPTS;
+  }
+}
+
+function persistMaxAttempts(value: number): void {
+  try {
+    localStorage.setItem(MAX_ATTEMPTS_KEY, String(clampMaxAttempts(value)));
+  } catch {
+    // ignore quota / disabled storage
+  }
+}
+
+export { MAX_MAX_ATTEMPTS, MIN_MAX_ATTEMPTS, DEFAULT_MAX_ATTEMPTS };
 
 export interface TelemetrySummary {
   qualityLabel: string;       // e.g. "healthy", "too dark", "low contrast"
@@ -81,6 +111,11 @@ interface AIState {
    * visual results because the visual scorer can pick the best one.
    */
   candidateCount: number;
+  /**
+   * Maximum compile attempts the V2 retry loop will run per generation.
+   * 1 = no retries. Range 1-5. Default 3.
+   */
+  maxAttempts: number;
 
   // Actions
   addMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
@@ -90,6 +125,7 @@ interface AIState {
   setLastError: (error: string | null) => void;
   setProvider: (name: string, model: string) => void;
   setCandidateCount: (count: number) => void;
+  setMaxAttempts: (value: number) => void;
   clearMessages: () => void;
   reset: () => void;
 }
@@ -109,6 +145,7 @@ export const useAIStore = create<AIState>((set) => ({
   providerName: 'Mock AI',
   modelName: 'mock-v1',
   candidateCount: loadCandidateCount(),
+  maxAttempts: loadMaxAttempts(),
 
   addMessage: (message) => set((state) => ({
     messages: [
@@ -144,6 +181,12 @@ export const useAIStore = create<AIState>((set) => ({
     const clamped = Math.min(3, Math.max(1, Math.floor(count)));
     persistCandidateCount(clamped);
     set({ candidateCount: clamped });
+  },
+
+  setMaxAttempts: (value) => {
+    const clamped = clampMaxAttempts(value);
+    persistMaxAttempts(clamped);
+    set({ maxAttempts: clamped });
   },
 
   clearMessages: () => set({

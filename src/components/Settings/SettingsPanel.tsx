@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useAIStore } from '../../store/aiStore';
+import { useAIStore, MIN_MAX_ATTEMPTS, MAX_MAX_ATTEMPTS } from '../../store/aiStore';
 import { shaderAgent } from '../../shader-agent/integration/service';
 import { OpenAICompatibleProvider } from '../../shader-agent/integration/providers/openai-compatible';
 import { MockAIProvider } from '../../shader-agent/integration/providers/mock';
@@ -58,6 +58,8 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const setProvider = useAIStore((s) => s.setProvider);
   const candidateCount = useAIStore((s) => s.candidateCount);
   const setCandidateCount = useAIStore((s) => s.setCandidateCount);
+  const maxAttempts = useAIStore((s) => s.maxAttempts);
+  const setMaxAttempts = useAIStore((s) => s.setMaxAttempts);
 
   useEffect(() => {
     if (isOpen) {
@@ -412,6 +414,50 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
             Generate up to {candidateCount} shader{candidateCount === 1 ? '' : 's'} per request
             and keep the one that best matches your intent. Higher = better visual
             quality, more API tokens.
+          </p>
+        </div>
+
+        {/* V2: Compile Retry Attempts */}
+        <div style={{ marginBottom: 20 }}>
+          <label style={{
+            display: 'block',
+            fontSize: 13,
+            fontWeight: 600,
+            color: 'var(--text-secondary)',
+            marginBottom: 8,
+          }}>
+            Compile retry attempts
+          </label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <input
+              type="range"
+              min={MIN_MAX_ATTEMPTS}
+              max={MAX_MAX_ATTEMPTS}
+              step={1}
+              value={maxAttempts}
+              onChange={(e) => setMaxAttempts(Number.parseInt(e.target.value, 10))}
+              data-testid="max-attempts-slider"
+              style={{ flex: 1, accentColor: 'var(--accent-blue)' }}
+            />
+            <div style={{
+              minWidth: 32,
+              textAlign: 'right',
+              fontSize: 13,
+              fontFamily: 'var(--font-mono)',
+              color: 'var(--text-primary)',
+            }}>
+              {maxAttempts}
+            </div>
+          </div>
+          <p style={{
+            fontSize: 11,
+            color: 'var(--text-secondary)',
+            marginTop: 6,
+          }}>
+            If the LLM's shader fails to compile, the system will retry up to{' '}
+            {maxAttempts - 1} more time{maxAttempts === 2 ? '' : 's'} with the
+            error fed back to the model. Higher = more chances to self-repair,
+            more API tokens.
           </p>
         </div>
 

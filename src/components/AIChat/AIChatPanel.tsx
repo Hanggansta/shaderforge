@@ -56,6 +56,7 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
   const activeIntent = useAIStore((s) => s.activeIntent);
   const requestState = useAIStore((s) => s.requestState);
   const providerName = useAIStore((s) => s.providerName);
+  const maxAttempts = useAIStore((s) => s.maxAttempts);
   const addMessage = useAIStore((s) => s.addMessage);
   const setActiveIntent = useAIStore((s) => s.setActiveIntent);
   const setRequestState = useAIStore((s) => s.setRequestState);
@@ -120,7 +121,7 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
         prompt,
         {
           onProgress: handleProgress,
-          maxAttempts: 3,
+          maxAttempts,
         }
       );
 
@@ -178,7 +179,7 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
         content: lines.join('\n'),
       });
     }
-  }, [input, activeIntent, isLoading, addMessage, setRequestState, setLastError, setCodeFromAI, handleProgress]);
+  }, [input, activeIntent, isLoading, maxAttempts, addMessage, setRequestState, setLastError, setCodeFromAI, handleProgress]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
