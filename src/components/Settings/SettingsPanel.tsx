@@ -1,9 +1,38 @@
 import { useState, useEffect } from 'react';
-import { useAIStore, MIN_MAX_ATTEMPTS, MAX_MAX_ATTEMPTS } from '../../store/aiStore';
+import { useAIStore, MIN_MAX_ATTEMPTS, MAX_MAX_ATTEMPTS, type TelemetryStats } from '../../store/aiStore';
 import { shaderAgent } from '../../shader-agent/integration/service';
 import { OpenAICompatibleProvider } from '../../shader-agent/integration/providers/openai-compatible';
 import { MockAIProvider } from '../../shader-agent/integration/providers/mock';
 import { normalizeProviderError } from '../../shader-agent/integration/types/provider-errors';
+
+function formatPercent(part: number, total: number): string {
+  if (total === 0) return '—';
+  return `${((part / total) * 100).toFixed(1)}%`;
+}
+
+function StatRow({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'baseline',
+        fontSize: 12,
+        lineHeight: 1.4,
+      }}
+    >
+      <span style={{ color: 'var(--text-secondary)' }}>{label}</span>
+      <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
+        {value}
+        {hint && (
+          <span style={{ color: 'var(--text-secondary)', marginLeft: 6, fontSize: 10 }}>
+            ({hint})
+          </span>
+        )}
+      </span>
+    </div>
+  );
+}
 
 interface SettingsPanelProps {
   isOpen: boolean;
@@ -60,6 +89,7 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const setCandidateCount = useAIStore((s) => s.setCandidateCount);
   const maxAttempts = useAIStore((s) => s.maxAttempts);
   const setMaxAttempts = useAIStore((s) => s.setMaxAttempts);
+  const telemetryStats = useAIStore((s) => s.telemetryStats);
 
   useEffect(() => {
     if (isOpen) {
@@ -461,6 +491,9 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
           </p>
         </div>
 
+        {/* V2: Telemetry (read-only) */}
+        <TelemetrySection stats={telemetryStats} />
+
         {/* Actions */}
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button
@@ -476,6 +509,53 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
             Save
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function TelemetrySection({ stats }: { stats: TelemetryStats }) {
+  const successTotal = stats.firstAttemptSuccess + stats.retrySuccess;
+  return (
+    <div
+      data-testid="telemetry-section"
+      style={{
+        marginBottom: 20,
+        padding: 12,
+        background: 'var(--bg-tertiary)',
+        border: '1px solid var(--border-color)',
+        borderRadius: 6,
+      }}
+    >
+      <div style={{
+        fontSize: 13,
+        fontWeight: 600,
+        color: 'var(--text-secondary)',
+        marginBottom: 8,
+      }}>
+        Compile retry stats
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <StatRow label="Total runs" value={String(stats.totalRuns)} />
+        <StatRow
+          label="First-attempt success"
+          value={String(stats.firstAttemptSuccess)}
+          hint={formatPercent(stats.firstAttemptSuccess, stats.totalRuns)}
+        />
+        <StatRow
+          label="Retry success"
+          value={String(stats.retrySuccess)}
+          hint={formatPercent(stats.retrySuccess, stats.totalRuns)}
+        />
+        <StatRow
+          label="Total failures"
+          value={String(stats.totalFailures)}
+          hint={formatPercent(stats.totalFailures, stats.totalRuns)}
+        />
+        <StatRow
+          label="Overall success rate"
+          value={formatPercent(successTotal, stats.totalRuns)}
+        />
       </div>
     </div>
   );

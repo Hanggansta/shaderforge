@@ -13,6 +13,8 @@ import {
   DEFAULT_MAX_ATTEMPTS,
   MAX_MAX_ATTEMPTS,
   MIN_MAX_ATTEMPTS,
+  applyRunResult,
+  type TelemetryStats,
 } from '../aiStore';
 
 describe('clampMaxAttempts', () => {
@@ -51,5 +53,80 @@ describe('clampMaxAttempts', () => {
     expect(DEFAULT_MAX_ATTEMPTS).toBe(3);
     expect(DEFAULT_MAX_ATTEMPTS).toBeGreaterThanOrEqual(MIN_MAX_ATTEMPTS);
     expect(DEFAULT_MAX_ATTEMPTS).toBeLessThanOrEqual(MAX_MAX_ATTEMPTS);
+  });
+});
+
+const EMPTY: TelemetryStats = {
+  totalRuns: 0,
+  firstAttemptSuccess: 0,
+  retrySuccess: 0,
+  totalFailures: 0,
+};
+
+describe('applyRunResult', () => {
+  it('counts first-attempt success', () => {
+    const next = applyRunResult(EMPTY, true, 1);
+    expect(next).toEqual({
+      totalRuns: 1,
+      firstAttemptSuccess: 1,
+      retrySuccess: 0,
+      totalFailures: 0,
+    });
+  });
+
+  it('counts retry success (attempts > 1)', () => {
+    const next = applyRunResult(EMPTY, true, 2);
+    expect(next.firstAttemptSuccess).toBe(0);
+    expect(next.retrySuccess).toBe(1);
+    expect(next.totalFailures).toBe(0);
+    expect(next.totalRuns).toBe(1);
+  });
+
+  it('counts total failure regardless of attempts', () => {
+    const next1 = applyRunResult(EMPTY, false, 1);
+    expect(next1.totalFailures).toBe(1);
+    expect(next1.firstAttemptSuccess).toBe(0);
+    expect(next1.retrySuccess).toBe(0);
+
+    const next3 = applyRunResult(EMPTY, false, 3);
+    expect(next3.totalFailures).toBe(1);
+    expect(next3.retrySuccess).toBe(0);
+  });
+
+  it('accumulates across multiple runs', () => {
+    let s: TelemetryStats = EMPTY;
+    s = applyRunResult(s, true, 1);   // 1/1 first-try
+    s = applyRunResult(s, true, 2);   // 1 retry-success
+    s = applyRunResult(s, false, 3);  // 1 failure
+    s = applyRunResult(s, true, 1);   // 1/1 first-try
+    expect(s).toEqual({
+      totalRuns: 4,
+      firstAttemptSuccess: 2,
+      retrySuccess: 1,
+      totalFailures: 1,
+    });
+  });
+
+  it('treats attempts <= 0 as first attempt (defensive floor)', () => {
+    const next = applyRunResult(EMPTY, true, 0);
+    expect(next.firstAttemptSuccess).toBe(1);
+    expect(next.retrySuccess).toBe(0);
+  });
+
+  it('floors fractional attempts to integers', () => {
+    const next = applyRunResult(EMPTY, true, 2.7);
+    expect(next.retrySuccess).toBe(1);
+  });
+
+  it('is pure — does not mutate the input', () => {
+    const input: TelemetryStats = {
+      totalRuns: 5,
+      firstAttemptSuccess: 3,
+      retrySuccess: 1,
+      totalFailures: 1,
+    };
+    const snapshot = { ...input };
+    applyRunResult(input, true, 2);
+    expect(input).toEqual(snapshot);
   });
 });

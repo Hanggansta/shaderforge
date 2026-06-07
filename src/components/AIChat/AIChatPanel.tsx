@@ -61,6 +61,7 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
   const setActiveIntent = useAIStore((s) => s.setActiveIntent);
   const setRequestState = useAIStore((s) => s.setRequestState);
   const setLastError = useAIStore((s) => s.setLastError);
+  const recordRunResult = useAIStore((s) => s.recordRunResult);
 
   const setCode = useEditorStore((s) => s.setCode);
   const setCodeFromAI = useEditorStore((s) => s.setCodeFromAI);
@@ -142,6 +143,7 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
           intent: msgIntent,
           detectedIntent: result.detectedIntent,
         });
+        recordRunResult(true, result.attempts);
         setLastFailedContext(null);
       } else {
         if (result.errors && result.errors.length > 0) {
@@ -165,6 +167,7 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
       }
 
       setRequestState('idle');
+      recordRunResult(false, result.attempts);
     } catch (error) {
       const providerError = normalizeProviderError(error);
       setLastError(providerError.message);
@@ -179,7 +182,7 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
         content: lines.join('\n'),
       });
     }
-  }, [input, activeIntent, isLoading, maxAttempts, addMessage, setRequestState, setLastError, setCodeFromAI, handleProgress]);
+  }, [input, activeIntent, isLoading, maxAttempts, addMessage, setRequestState, setLastError, setCodeFromAI, recordRunResult, handleProgress]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {

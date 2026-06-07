@@ -11,6 +11,14 @@ const DEFAULT_MAX_ATTEMPTS = 3;
 const MIN_MAX_ATTEMPTS = 1;
 const MAX_MAX_ATTEMPTS = 5;
 
+const STATS_KEY = 'shaderforge-ai-telemetry-stats';
+const EMPTY_STATS: TelemetryStats = {
+  totalRuns: 0,
+  firstAttemptSuccess: 0,
+  retrySuccess: 0,
+  totalFailures: 0,
+};
+
 function loadCandidateCount(): number {
   try {
     const stored = localStorage.getItem(CANDIDATE_COUNT_KEY);
@@ -55,6 +63,56 @@ function persistMaxAttempts(value: number): void {
 }
 
 export { MAX_MAX_ATTEMPTS, MIN_MAX_ATTEMPTS, DEFAULT_MAX_ATTEMPTS };
+
+export interface TelemetryStats {
+  totalRuns: number;
+  /** Compile pass on the first attempt (no retries needed). */
+  firstAttemptSuccess: number;
+  /** Compile pass only after at least one retry succeeded. */
+  retrySuccess: number;
+  /** All attempts failed. */
+  totalFailures: number;
+}
+
+export function applyRunResult(
+  stats: TelemetryStats,
+  success: boolean,
+  attempts: number
+): TelemetryStats {
+  const safeAttempts = Math.max(1, Math.floor(attempts));
+  const totalRuns = stats.totalRuns + 1;
+  const firstAttemptSuccess =
+    stats.firstAttemptSuccess + (success && safeAttempts === 1 ? 1 : 0);
+  const retrySuccess =
+    stats.retrySuccess + (success && safeAttempts > 1 ? 1 : 0);
+  const totalFailures = stats.totalFailures + (success ? 0 : 1);
+  return { totalRuns, firstAttemptSuccess, retrySuccess, totalFailures };
+}
+
+function loadStats(): TelemetryStats {
+  try {
+    const raw = localStorage.getItem(STATS_KEY);
+    if (!raw) return { ...EMPTY_STATS };
+    const parsed = JSON.parse(raw) as Partial<TelemetryStats> | null;
+    if (!parsed) return { ...EMPTY_STATS };
+    return {
+      totalRuns: Number.isFinite(parsed.totalRuns) ? Number(parsed.totalRuns) : 0,
+      firstAttemptSuccess: Number.isFinite(parsed.firstAttemptSuccess) ? Number(parsed.firstAttemptSuccess) : 0,
+      retrySuccess: Number.isFinite(parsed.retrySuccess) ? Number(parsed.retrySuccess) : 0,
+      totalFailures: Number.isFinite(parsed.totalFailures) ? Number(parsed.totalFailures) : 0,
+    };
+  } catch {
+    return { ...EMPTY_STATS };
+  }
+}
+
+function persistStats(stats: TelemetryStats): void {
+  try {
+    localStorage.setItem(STATS_KEY, JSON.stringify(stats));
+  } catch {
+    // ignore quota / disabled storage
+  }
+}
 
 export interface TelemetrySummary {
   qualityLabel: string;       // e.g. "healthy", "too dark", "low contrast"
@@ -116,6 +174,11 @@ interface AIState {
    * 1 = no retries. Range 1-5. Default 3.
    */
   maxAttempts: number;
+  /**
+   * Telemetry stats for compile-retry outcomes, persisted across sessions.
+   * Updated by AIChatPanel after each generation completes.
+   */
+  telemetryStats: TelemetryStats;
 
   // Actions
   addMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
@@ -126,11 +189,12 @@ interface AIState {
   setProvider: (name: string, model: string) => void;
   setCandidateCount: (count: number) => void;
   setMaxAttempts: (value: number) => void;
+  recordRunResult: (success: boolean, attempts: number) => void;
   clearMessages: () => void;
   reset: () => void;
 }
 
-export const useAIStore = create<AIState>((set) => ({
+export const useAIStore = create<AIState>((set, get) => ({
   messages: [
     {
       id: 'welcome',
@@ -146,6 +210,7 @@ export const useAIStore = create<AIState>((set) => ({
   modelName: 'mock-v1',
   candidateCount: loadCandidateCount(),
   maxAttempts: loadMaxAttempts(),
+  telemetryStats: loadStats(),
 
   addMessage: (message) => set((state) => ({
     messages: [
@@ -187,6 +252,12 @@ export const useAIStore = create<AIState>((set) => ({
     const clamped = clampMaxAttempts(value);
     persistMaxAttempts(clamped);
     set({ maxAttempts: clamped });
+  },
+
+  recordRunResult: (success, attempts) => {
+    const next = applyRunResult(get().telemetryStats, success, attempts);
+    persistStats(next);
+    set({ telemetryStats: next });
   },
 
   clearMessages: () => set({
