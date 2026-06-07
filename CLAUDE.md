@@ -2,7 +2,7 @@
 
 Browser-based Shadertoy-style GLSL shader editor with AI-assisted shader generation.
 
-> **V1 状态**：V1 完成，V2 在路上（编译自动修复）。
+> **V1 状态**：V1 完成，V2 完成。
 > **V1 计划原文**：`shader_agent_harness_plan.html`（最高优先级）。
 > **设计语言**：[DESIGN.md](./DESIGN.md)。
 
@@ -13,7 +13,7 @@ V1 核心原则：**先稳定、再聪明；先编译、再审美；先技术卡
 | 阶段 | 目标 | 状态 |
 |---|---|---|
 | **V1** | Input prompt → Visual Structurer → Shader Planner → Reference Selector → Code Agent → Compiler → Screenshot Renderer。固定 workflow，编译能通过，截图能出。 | ✅ Done |
-| **V2** | 编译自动修复：Compiler 失败 → Code Agent 拿错误日志重写 → 2-3 次 retry。 | ⏳ Next |
+| **V2** | 编译自动修复：Compiler 失败 → Code Agent 拿错误日志重写 → 2-3 次 retry。 | ✅ Done |
 | **V3** | 截图反馈 Patch：Screenshot → Visual diff → Code Agent 改。 | ⏳ Planned |
 | **V4** | Technique Cards 扩到 20-50 张；建立 index / search。 | ⏳ Planned |
 | **V5** | Mastra / 半 RAG / 视觉评估；candidate-eval 接 workflow。 | ⏳ Planned |

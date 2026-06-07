@@ -13,7 +13,7 @@
 | 阶段 | 状态 | 范围 |
 |---|---|---|
 | **V1** | ✅ Done | Visual Structurer / Planner / Reference Selector / Code Agent / Compiler / Screenshot Renderer；固定 5 步 workflow；9 张 golden shader；in-memory runs |
-| **V2** | ⏳ Next | 编译自动修复（2-3 retry）、CompileReport 接回 Code Agent |
+| **V2** | ✅ Done | 编译自动修复（2-3 retry）、CompileReport 接回 Code Agent |
 | **V3** | ⏳ Planned | 截图反馈 Patch、Visual Diff、Modify Flow |
 | **V4** | ⏳ Planned | Technique Cards 扩到 20-50 张、Reference Panel、Technique Inspector |
 | **V5** | ⏳ Planned | Mastra / 半 RAG / 视觉评估、Visual Critique UI、Reference Image Workflow |

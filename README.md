@@ -2,7 +2,7 @@
 
 Browser-based Shadertoy-style GLSL shader editor with AI-assisted shader generation.
 
-> **V1 状态**：V1 完成，V2 在路上（编译自动修复）。
+> **V1 状态**：V1 完成，V2 完成。
 > V1 计划原文：`shader_agent_harness_plan.html`。
 > V1-V5 roadmap / 验收标准：[CLAUDE.md](./CLAUDE.md)。
 > 设计语言：[DESIGN.md](./DESIGN.md)。
@@ -165,7 +165,7 @@ Browser-side real WebGL2 编译无法在 Vitest 跑，**视觉验证**需要 `np
 | 阶段 | 目标 | 状态 |
 |---|---|---|
 | **V1** | 跑通最小闭环 (3 Agents + 3 Tools 固定 workflow) | ✅ Done |
-| **V2** | 编译自动修复（2-3 retry） | ⏳ Next |
+| **V2** | 编译自动修复（2-3 retry） | ✅ Done |
 | **V3** | 截图反馈 Patch + Modify Flow | ⏳ Planned |
 | **V4** | Technique Cards 扩到 20-50 张 | ⏳ Planned |
 | **V5** | Mastra / 半 RAG / 视觉评估 | ⏳ Planned |
