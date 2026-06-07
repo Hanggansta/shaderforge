@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useEditorStore } from '../../store/editorStore';
 import { useAIStore, type ChatMessage } from '../../store/aiStore';
 import { shaderAgent } from '../../shader-agent/integration/service';
@@ -7,6 +7,12 @@ import { normalizeProviderError } from '../../shader-agent/integration/types/pro
 import { PRESETS } from '../../shader-agent/presets';
 import { SettingsPanel } from '../Settings/SettingsPanel';
 import type { AIIntent } from '../../shader-agent/integration/types/ai-provider';
+import { buildManualFixPrompt, type ManualFixInput } from './manual-fix-prompt';
+
+interface FailedContext {
+  prompt: string;
+  errorSummary: string;
+}
 
 const INTENTS: { id: AIIntent; label: string; icon: string }[] = [
   { id: 'auto', label: 'Auto', icon: '🤖' },
@@ -43,6 +49,8 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
   const [showSettings, setShowSettings] = useState(false);
   const [progressSteps, setProgressSteps] = useState<ProgressStep[]>([]);
   const [expandedDetails, setExpandedDetails] = useState<Set<string>>(new Set());
+  const [lastFailedContext, setLastFailedContext] = useState<FailedContext | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const messages = useAIStore((s) => s.messages);
   const activeIntent = useAIStore((s) => s.activeIntent);
@@ -105,6 +113,7 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
     setRequestState('loading');
     setLastError(null);
     setProgressSteps([]);
+    setLastFailedContext(null);
 
     try {
       const result = await shaderAgent.generateAsAgentResult(
@@ -132,6 +141,7 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
           intent: msgIntent,
           detectedIntent: result.detectedIntent,
         });
+        setLastFailedContext(null);
       } else {
         if (result.errors && result.errors.length > 0) {
           const errorSummary = result.errors
@@ -143,11 +153,13 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
             role: 'system',
             content: `Generation failed after ${result.attempts} attempts.\n${errorSummary}\n\nTry simplifying your description or select a preset.`,
           });
+          setLastFailedContext({ prompt, errorSummary });
         } else {
           addMessage({
             role: 'system',
             content: 'Generation failed. Please try again or check your API settings.',
           });
+          setLastFailedContext({ prompt, errorSummary: 'No structured error captured.' });
         }
       }
 
@@ -198,6 +210,29 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
     setProgressSteps([]);
     addMessage({ role: 'system', content: 'Request cancelled.' });
   };
+
+  const handleRetry = useCallback(() => {
+    if (!lastFailedContext || isLoading) return;
+    void handleSend(lastFailedContext.prompt, activeIntent);
+  }, [lastFailedContext, isLoading, handleSend, activeIntent]);
+
+  const handleManualFix = useCallback(() => {
+    if (!lastFailedContext) return;
+    const fixInput: ManualFixInput = {
+      userPrompt: lastFailedContext.prompt,
+      errorSummary: lastFailedContext.errorSummary,
+    };
+    const { inputText, cursorOffset } = buildManualFixPrompt(fixInput);
+    setInput(inputText);
+    // Defer focus + caret positioning to the next tick so React commits the
+    // new value to the textarea first.
+    requestAnimationFrame(() => {
+      const ta = textareaRef.current;
+      if (!ta) return;
+      ta.focus();
+      ta.setSelectionRange(cursorOffset, cursorOffset);
+    });
+  }, [lastFailedContext]);
 
   const toggleDetails = (msgId: string) => {
     setExpandedDetails((prev) => {
@@ -508,6 +543,43 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
             )}
           </div>
           <div className="ai-input-area">
+            {!isLoading && lastFailedContext && (
+              <div
+                data-testid="ai-recovery"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  marginBottom: 6,
+                  padding: '4px 6px',
+                  background: 'var(--bg-secondary, #1e1e2e)',
+                  border: '1px solid var(--border-color, #333)',
+                  borderRadius: 4,
+                  fontSize: 11,
+                  color: 'var(--text-secondary)',
+                }}
+              >
+                <span style={{ flex: 1 }}>Auto-repair failed. You can:</span>
+                <button
+                  type="button"
+                  className="toolbar-btn"
+                  onClick={handleRetry}
+                  title="Re-run generation with the same prompt"
+                  data-testid="ai-recovery-retry"
+                >
+                  ↻ Retry
+                </button>
+                <button
+                  type="button"
+                  className="toolbar-btn"
+                  onClick={handleManualFix}
+                  title="Prefill the input with the last compile error so you can guide the fix"
+                  data-testid="ai-recovery-manual"
+                >
+                  ✎ Manual fix
+                </button>
+              </div>
+            )}
             <div className="ai-intent-bar">
               {INTENTS.map((intent) => (
                 <button
@@ -522,6 +594,7 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
             </div>
             <div className="ai-input-row">
               <textarea
+                ref={textareaRef}
                 className="ai-input"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
