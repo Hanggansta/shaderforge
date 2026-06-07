@@ -14,6 +14,7 @@ import { MockAIProvider } from './providers/mock';
 import { createLLMClient, type LLMClient } from './llm-adapters';
 import { generateShader, type GenerateOptions, type GenerateResult } from '../workflows/generate-shader';
 import { patchShader, type PatchOptions, type PatchResult } from '../workflows/patch-shader';
+import type { CompileAttemptEvent } from '../workflows/compile-fix-loop';
 import { runsStore, type RunArtifact } from '../runs/runs';
 import { adaptGenerateResult, adaptPatchResult } from './agent-result-adapter';
 import type { AgentResult, AgentProgress } from './agent-result-types';
@@ -54,13 +55,33 @@ export class ShaderAgentService {
     options?: Partial<GenerateOptions> & { onProgress?: (p: AgentProgress) => void }
   ): Promise<GenerateResult> {
     const { onProgress, ...rest } = options ?? {};
+    const maxAttempts = rest.maxAttempts ?? 3;
     if (onProgress) {
-      onProgress({ status: 'generating', attempt: 0, maxAttempts: rest.maxAttempts ?? 3, message: 'Starting shader generation…' });
+      onProgress({ status: 'generating', attempt: 0, maxAttempts, message: 'Starting shader generation…' });
     }
+    const onAttempt = (event: CompileAttemptEvent): void => {
+      if (!onProgress) return;
+      const message =
+        event.status === 'compiling'
+          ? `Compiling ${event.attempt}/${event.maxAttempts}…`
+          : event.status === 'fixing'
+            ? `Fix errors (${event.attempt}/${event.maxAttempts})…`
+            : event.status === 'success'
+              ? 'Compiled'
+              : `Failed after ${event.attempt}/${event.maxAttempts} attempts`;
+      onProgress({
+        status: event.status,
+        attempt: event.attempt,
+        maxAttempts: event.maxAttempts,
+        message,
+        ...(event.errorSummary ? { details: event.errorSummary } : {}),
+      });
+    };
     const result = await generateShader(userPrompt, {
       llm: this.llm,
       provider: this.provider,
-      maxAttempts: rest.maxAttempts ?? 3,
+      maxAttempts,
+      onAttempt,
       ...rest,
     });
     if (onProgress) {

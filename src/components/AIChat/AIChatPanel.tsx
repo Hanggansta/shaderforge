@@ -61,7 +61,12 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
   const isLoading = requestState === 'loading';
 
   const handleProgress = useCallback((progress: AgentProgress) => {
-    const label = PROGRESS_LABELS[progress.status] || progress.status;
+    const baseLabel = PROGRESS_LABELS[progress.status] || progress.status;
+    const label =
+      progress.attempt > 0 && progress.maxAttempts > 0
+        ? `${baseLabel} ${progress.attempt}/${progress.maxAttempts}`
+        : baseLabel;
+    const details = progress.details ?? progress.message;
     setProgressSteps((prev) => {
       const existing = prev.findIndex((s) => s.label === label);
       if (existing >= 0) {
@@ -69,7 +74,7 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
         next[existing] = {
           ...next[existing],
           status: progress.status === 'success' || progress.status === 'failed' ? 'done' : 'active',
-          details: progress.message,
+          details,
         };
         for (let i = 0; i < existing; i++) {
           next[i] = { ...next[i], status: 'done' };
@@ -78,7 +83,7 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
       }
       return [
         ...prev.map((s) => ({ ...s, status: 'done' as const })),
-        { label, status: 'active' as const, details: progress.message },
+        { label, status: 'active' as const, details },
       ];
     });
   }, []);
@@ -438,21 +443,40 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
                       key={i}
                       style={{
                         display: 'flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        fontSize: 12,
+                        flexDirection: 'column',
+                        gap: 2,
                         opacity: step.status === 'done' ? 0.7 : 1,
                       }}
                     >
-                      <span style={{ fontSize: 12, width: 16, textAlign: 'center' }}>
-                        {step.status === 'done' ? '✓' : '·'}
-                      </span>
-                      <span style={{
-                        fontWeight: step.status === 'active' ? 500 : 400,
-                        color: step.status === 'active' ? 'var(--text-primary)' : 'var(--text-secondary)',
-                      }}>
-                        {step.label}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                        <span style={{ fontSize: 12, width: 16, textAlign: 'center' }}>
+                          {step.status === 'done' ? '✓' : '·'}
+                        </span>
+                        <span style={{
+                          fontWeight: step.status === 'active' ? 500 : 400,
+                          color: step.status === 'active' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                        }}>
+                          {step.label}
+                        </span>
+                      </div>
+                      {step.details && (
+                        <div
+                          data-testid="progress-step-details"
+                          style={{
+                            fontSize: 10,
+                            color: 'var(--text-secondary)',
+                            fontFamily: 'var(--font-mono)',
+                            paddingLeft: 22,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            maxWidth: '100%',
+                          }}
+                          title={step.details}
+                        >
+                          {step.details}
+                        </div>
+                      )}
                     </div>
                   ))}
                   <button

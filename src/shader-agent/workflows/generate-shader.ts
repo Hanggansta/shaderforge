@@ -12,7 +12,7 @@ import { runVisualStructurer } from '../agents/visual-structurer';
 import { runShaderPlanner } from '../agents/shader-planner';
 import { runCodePatchAgent } from '../agents/code-patch-agent';
 import { selectReferences } from '../tools/reference-selector';
-import { runCompileFixLoop } from './compile-fix-loop';
+import { runCompileFixLoop, type CompileAttemptEvent } from './compile-fix-loop';
 import { renderScreenshots } from '../tools/screenshot-renderer';
 import { runsStore, type RunArtifact } from '../runs/runs';
 
@@ -22,6 +22,8 @@ export interface GenerateOptions {
   maxAttempts?: number;
   screenshot?: { width: number; height: number; times?: number[] };
   runId?: string;
+  /** Per-attempt observer forwarded to the compile-fix loop. */
+  onAttempt?: (event: CompileAttemptEvent) => void;
 }
 
 export interface GenerateResult extends ShaderResult {
@@ -66,6 +68,7 @@ export async function generateShader(
     initialCode: firstPass.code,
     initialRawResponse: firstPass.rawResponse,
     maxAttempts,
+    ...(options.onAttempt ? { onAttempt: options.onAttempt } : {}),
   });
 
   let screenshots: ScreenshotFrame[] | undefined;

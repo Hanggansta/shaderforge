@@ -14,6 +14,14 @@ import type { CompileReport } from '../schemas/compile-report';
 import { compileShader } from '../tools/shader-compiler';
 import { runCodePatchAgent, type CodePatchInput, type CodePatchOutput } from '../agents/code-patch-agent';
 
+export interface CompileAttemptEvent {
+  attempt: number;
+  maxAttempts: number;
+  status: 'compiling' | 'fixing' | 'success' | 'failed';
+  /** First line of the compile error, when status is 'fixing' or 'failed'. */
+  errorSummary?: string;
+}
+
 export interface CompileFixLoopInput {
   llm: LLMClient | null;
   visualCard: VisualCard;
@@ -24,6 +32,9 @@ export interface CompileFixLoopInput {
   initialCode: string;
   initialRawResponse: string;
   maxAttempts: number;
+  /** Optional observer for per-attempt events. Pure observability — does
+   *  not change control flow. Used by the UI to show retry status. */
+  onAttempt?: (event: CompileAttemptEvent) => void;
 }
 
 export interface CompileFixLoopOutput {
@@ -42,11 +53,14 @@ export async function runCompileFixLoop(
   const reports: CompileReport[] = [];
   const rawResponses: string[] = [input.initialRawResponse];
   let current = input.initialCode;
+  const onAttempt = input.onAttempt;
 
   for (let attempt = 1; attempt <= input.maxAttempts; attempt++) {
+    onAttempt?.({ attempt, maxAttempts: input.maxAttempts, status: 'compiling' });
     const report = await compileShader(current);
     reports.push(report);
     if (report.ok) {
+      onAttempt?.({ attempt, maxAttempts: input.maxAttempts, status: 'success' });
       return {
         finalCode: current,
         finalReport: report,
@@ -55,7 +69,22 @@ export async function runCompileFixLoop(
         rawResponses,
       };
     }
-    if (attempt === input.maxAttempts) break;
+    const errorSummary = report.errors?.[0]?.message ?? report.rawLog?.split('\n')[0];
+    if (attempt === input.maxAttempts) {
+      onAttempt?.({
+        attempt,
+        maxAttempts: input.maxAttempts,
+        status: 'failed',
+        errorSummary,
+      });
+      break;
+    }
+    onAttempt?.({
+      attempt,
+      maxAttempts: input.maxAttempts,
+      status: 'fixing',
+      errorSummary,
+    });
     // Hand the failure to the Code/Patch agent.
     const fixInput: CodePatchInput = {
       mode: 'fix_compile_error',

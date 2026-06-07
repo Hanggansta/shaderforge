@@ -11,7 +11,7 @@ import type { ShaderResult } from '../schemas/shader-result';
 import { runShaderPlanner } from '../agents/shader-planner';
 import { runCodePatchAgent } from '../agents/code-patch-agent';
 import { selectReferences } from '../tools/reference-selector';
-import { runCompileFixLoop } from './compile-fix-loop';
+import { runCompileFixLoop, type CompileAttemptEvent } from './compile-fix-loop';
 import { runsStore, type RunArtifact } from '../runs/runs';
 
 export interface PatchOptions {
@@ -19,6 +19,8 @@ export interface PatchOptions {
   provider: AIProvider | null;
   maxAttempts?: number;
   runId?: string;
+  /** Per-attempt observer forwarded to the compile-fix loop. */
+  onAttempt?: (event: CompileAttemptEvent) => void;
 }
 
 export interface PatchResult extends ShaderResult {
@@ -60,6 +62,7 @@ export async function patchShader(
     initialCode: patched.code,
     initialRawResponse: patched.rawResponse,
     maxAttempts,
+    ...(options.onAttempt ? { onAttempt: options.onAttempt } : {}),
   });
 
   const artifact: RunArtifact = {
