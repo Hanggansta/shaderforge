@@ -3,6 +3,8 @@ import { useEditorStore } from '../../store/editorStore';
 import { usePreviewStore } from '../../store/previewStore';
 import { VERTEX_SHADER, wrapFragmentShader } from '../../services/shader/wrap-fragment-shader';
 import { parseShaderError } from '../../services/shader/parse-shader-error';
+import { WorkflowInspectorButton } from '../WorkflowInspector/WorkflowInspectorButton';
+import { WorkflowInspectorDrawer } from '../WorkflowInspector/WorkflowInspectorDrawer';
 
 export function PreviewPanel({ maximized, onToggleMaximize, style }: {
   maximized?: boolean;
@@ -31,6 +33,7 @@ export function PreviewPanel({ maximized, onToggleMaximize, style }: {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [contextLost, setContextLost] = useState(false);
   const [autoPaused, setAutoPaused] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const slowFrameCountRef = useRef(0);
 
   const code = useEditorStore((s) => s.code);
@@ -497,6 +500,10 @@ export function PreviewPanel({ maximized, onToggleMaximize, style }: {
           >
             {maximized ? '❐' : '⬜'}
           </button>
+          <WorkflowInspectorButton
+            open={inspectorOpen}
+            onClick={() => setInspectorOpen(!inspectorOpen)}
+          />
           <button
             className="preview-btn"
             onClick={handleFullscreen}
@@ -507,7 +514,7 @@ export function PreviewPanel({ maximized, onToggleMaximize, style }: {
           </button>
         </div>
       </div>
-      <div className="panel-content">
+      <div className="panel-content" style={{ position: 'relative' }}>
         <div className="preview-canvas-container">
           <canvas
             ref={canvasRef}
@@ -538,6 +545,10 @@ export function PreviewPanel({ maximized, onToggleMaximize, style }: {
             <span>FPS: {fps}</span>
           </div>
         </div>
+        <WorkflowInspectorDrawer
+          open={inspectorOpen}
+          onClose={() => setInspectorOpen(false)}
+        />
       </div>
     </div>
   );
