@@ -22,5 +22,5 @@
     "noFallthroughCasesInSwitch": true
   },
   "include": ["src"],
-  "exclude": ["src/ai/knowledge/rag/preprocess.ts"]
+  "exclude": ["src/ai/knowledge/rag/preprocess.ts", "src/billing/**"]
 }

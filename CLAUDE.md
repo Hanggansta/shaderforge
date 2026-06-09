@@ -1,4 +1,4 @@
-# ShaderForge
+# ShaderLumen
 
 Browser-based Shadertoy-style GLSL shader editor with AI-assisted shader generation.
 

@@ -66,7 +66,7 @@ export function exportShaderAsJson(code: string, name: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${name.replace(/[^a-z0-9]/gi, '_')}.shaderforge.json`;
+  a.download = `${name.replace(/[^a-z0-9]/gi, '_')}.shaderlumen.json`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -115,4 +115,48 @@ export async function importShaderFromFile(): Promise<{ name: string; code: stri
 
     input.click();
   });
+}
+
+/**
+ * Record a short video of the current live preview canvas.
+ * Production SaaS feature — users love being able to export beautiful loops.
+ */
+export async function exportShaderVideo(canvas: HTMLCanvasElement | null, name: string, durationSec = 6): Promise<boolean> {
+  if (!canvas) {
+    alert('Preview canvas not available for video export.');
+    return false;
+  }
+
+  try {
+    const stream = canvas.captureStream(30);
+    const recorder = new MediaRecorder(stream, {
+      mimeType: 'video/webm;codecs=vp9',
+    });
+
+    const chunks: Blob[] = [];
+    recorder.ondataavailable = (e) => chunks.push(e.data);
+
+    return await new Promise((resolve) => {
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'video/webm' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${name.replace(/[^a-z0-9]/gi, '_')}.webm`;
+        a.click();
+        URL.revokeObjectURL(url);
+        resolve(true);
+      };
+
+      recorder.start();
+      setTimeout(() => {
+        recorder.stop();
+        stream.getTracks().forEach(t => t.stop());
+      }, durationSec * 1000);
+    });
+  } catch (e) {
+    console.error('Video export failed', e);
+    alert('Video export requires a modern browser with WebM support. Try a shorter duration or use screen recording.');
+    return false;
+  }
 }

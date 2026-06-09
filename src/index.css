@@ -1,17 +1,44 @@
+@import './styles/pages.css';
+
 :root {
-  --bg-primary: #0d1117;
-  --bg-secondary: #161b22;
-  --bg-tertiary: #21262d;
-  --border-color: #30363d;
-  --text-primary: #c9d1d9;
+  /* Core dark technical base (preserved) */
+  --bg-primary: #0a0c12;
+  --bg-secondary: #11141c;
+  --bg-tertiary: #1a1f2e;
+  --border-color: #2a3142;
+  --text-primary: #e6e8ed;
   --text-secondary: #8b949e;
-  --accent-blue: #58a6ff;
-  --accent-green: #3fb950;
-  --accent-red: #f85149;
-  --accent-yellow: #d29922;
-  --accent-purple: #bc8cff;
-  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+
+  /* Cyberpunk Neon System (amplified for top-tier SaaS feel) */
+  --void-black: #05070d;
+  --graphite: #161b22;
+  --deep-navy: #0f1629;
+  --smoked-glass: rgba(16, 20, 35, 0.85);
+  --cool-cyan: #00f0ff;
+  --electric-violet: #8b5cf6;
+  --deep-magenta: #ff00aa;
+  --amber: #f4a261;
+  --fracture-red: #ff2d55;
+  --soft-white: #f0f4ff;
+  --steel-gray: #6b7280;
+  --neon-green: #39ff14;
+
+  /* Legacy accent aliases (mapped to new system for compatibility) */
+  --accent-blue: #00f0ff;
+  --accent-green: #39ff14;
+  --accent-red: #ff2d55;
+  --accent-yellow: #f4a261;
+  --accent-purple: #8b5cf6;
+
+  /* Z-index scale */
+  --z-base: 1;
+  --z-drawer: 60;
+  --z-nav: 50;
+  --z-modal: 70;
+  --z-skip: 80;
+
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', ui-monospace, monospace;
+  --font-sans: 'Outfit', system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
 * {
@@ -22,12 +49,17 @@
 
 html, body, #root {
   width: 100%;
-  height: 100%;
-  overflow: hidden;
+  min-height: 100vh;
   font-family: var(--font-sans);
   background: var(--bg-primary);
   color: var(--text-primary);
+  scroll-behavior: smooth;
 }
+
+/* Note: We intentionally removed the previous `height: 100%; overflow: hidden;` 
+   that was for the old monolithic fixed-height editor. Long pages like the 
+   marketing landing and gallery now scroll normally. The /studio editor 
+   page explicitly sets its own full-height container. */
 
 /* Scrollbar styling */
 ::-webkit-scrollbar {
@@ -46,4 +78,409 @@ html, body, #root {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-secondary);
+}
+
+/* ============================================
+   CYBERPUNK SAAS — GLOBAL PREMIUM STYLES
+   ============================================ */
+
+.cyber-grid {
+  background-image: 
+    linear-gradient(rgba(0, 240, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 240, 255, 0.06) 1px, transparent 1px);
+  background-size: 28px 28px;
+  position: relative;
+}
+
+.scanline {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 50%,
+    rgba(0, 240, 255, 0.035) 51%
+  );
+  background-size: 100% 4px;
+  pointer-events: none;
+  animation: scan 1.8s linear infinite;
+  z-index: 1;
+}
+
+@keyframes scan {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+.neon-text {
+  color: var(--soft-white);
+  text-shadow: 
+    0 0 4px var(--cool-cyan),
+    0 0 12px var(--electric-violet);
+}
+
+.neon-cyan {
+  color: var(--cool-cyan);
+  text-shadow: 0 0 8px var(--cool-cyan);
+}
+
+.neon-violet {
+  color: var(--electric-violet);
+  text-shadow: 0 0 8px var(--electric-violet);
+}
+
+.neon-magenta {
+  color: var(--deep-magenta);
+  text-shadow: 0 0 8px var(--deep-magenta);
+}
+
+.glitch {
+  position: relative;
+  animation: glitch-skew 1.2s infinite linear alternate-reverse;
+}
+
+.glitch::before,
+.glitch::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.glitch::before {
+  left: 2px;
+  text-shadow: -1px 0 var(--fracture-red);
+  clip: rect(42px, 9999px, 44px, 0);
+  animation: glitch-anim 1.5s infinite linear alternate-reverse;
+}
+
+.glitch::after {
+  left: -2px;
+  text-shadow: 1px 0 var(--cool-cyan);
+  clip: rect(42px, 9999px, 44px, 0);
+  animation: glitch-anim2 1.8s infinite linear alternate-reverse;
+}
+
+@keyframes glitch-anim {
+  0% { clip: rect(12px, 9999px, 14px, 0); }
+  20% { clip: rect(52px, 9999px, 55px, 0); }
+  40% { clip: rect(31px, 9999px, 33px, 0); }
+  60% { clip: rect(78px, 9999px, 81px, 0); }
+  80% { clip: rect(21px, 9999px, 23px, 0); }
+  100% { clip: rect(42px, 9999px, 44px, 0); }
+}
+
+@keyframes glitch-anim2 {
+  0% { clip: rect(65px, 9999px, 67px, 0); }
+  20% { clip: rect(23px, 9999px, 25px, 0); }
+  40% { clip: rect(81px, 9999px, 84px, 0); }
+  60% { clip: rect(14px, 9999px, 16px, 0); }
+  80% { clip: rect(55px, 9999px, 57px, 0); }
+  100% { clip: rect(31px, 9999px, 33px, 0); }
+}
+
+@keyframes glitch-skew {
+  0% { transform: skew(0deg); }
+  100% { transform: skew(0.4deg); }
+}
+
+.holo-card {
+  background: var(--smoked-glass);
+  border: 1px solid rgba(0, 240, 255, 0.2);
+  border-radius: 12px;
+  backdrop-filter: blur(12px);
+  transition: all 0.2s cubic-bezier(0.23, 1, 0.32, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Grain on premium cards for non-flat surface (audit technique) */
+.holo-card.grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(255,255,255,0.025) 0.7px, transparent 0);
+  background-size: 3.5px 3.5px;
+  mix-blend-mode: screen;
+  border-radius: inherit;
+}
+
+.holo-card::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 40%;
+  height: 300%;
+  background: linear-gradient(
+    120deg,
+    transparent,
+    rgba(0, 240, 255, 0.25),
+    transparent
+  );
+  transform: skewX(-25deg);
+  animation: holo-sweep 2.8s infinite;
+}
+
+@keyframes holo-sweep {
+  0% { transform: translateX(-120%) skewX(-25deg); }
+  20% { transform: translateX(300%) skewX(-25deg); }
+  100% { transform: translateX(300%) skewX(-25deg); }
+}
+
+.holo-card:hover {
+  border-color: var(--cool-cyan);
+  box-shadow: 0 0 0 1px var(--cool-cyan), 0 20px 50px -10px rgba(0, 0, 0, 0.6);
+  transform: translateY(-2px);
+}
+
+.pipeline-step {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  transition: all 0.2s ease;
+}
+
+.pipeline-step.active {
+  border-color: var(--cool-cyan);
+  background: rgba(0, 240, 255, 0.06);
+  box-shadow: 0 0 0 1px var(--cool-cyan);
+}
+
+.stat-number {
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+}
+
+/* Premium SaaS buttons */
+.btn-cyber {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px 26px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  border-radius: 8px;
+  border: 1px solid var(--cool-cyan);
+  background: transparent;
+  color: var(--soft-white);
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.23, 1, 0.32, 1);
+  text-decoration: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-cyber:hover {
+  background: var(--cool-cyan);
+  color: var(--void-black);
+  box-shadow: 0 0 20px rgba(0, 240, 255, 0.5);
+  transform: translateY(-1px);
+}
+
+.btn-cyber:focus-visible {
+  outline: 2px solid var(--cool-cyan);
+  outline-offset: 3px;
+}
+
+.btn-cyber:active {
+  transform: scale(0.985) translateY(0);
+}
+
+.btn-cyber.primary {
+  /* Premium non-generic: solid + strong glow instead of the classic AI cyan-violet linear (audit flag) */
+  background: var(--cool-cyan);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: var(--void-black);
+  font-weight: 700;
+  box-shadow: 0 0 0 1px rgba(0, 240, 255, 0.4), 0 10px 30px -10px rgba(0, 240, 255, 0.5);
+}
+
+.btn-cyber.primary:hover {
+  background: color-mix(in srgb, var(--cool-cyan) 92%, white);
+  box-shadow: 0 0 0 1px var(--cool-cyan), 0 0 40px -5px var(--cool-cyan);
+  transform: translateY(-1px);
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.btn-ghost:hover {
+  border-color: var(--text-primary);
+  color: var(--text-primary);
+}
+
+.btn-ghost:focus-visible {
+  outline: 2px solid var(--cool-cyan);
+  outline-offset: 2px;
+}
+
+/* Landing specific */
+.landing {
+  min-height: 100vh;
+  background: var(--void-black);
+  color: var(--soft-white);
+  overflow-x: hidden;
+}
+
+.hero-shader-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  opacity: 0.42; /* lowered opacity so the dark cyber hero doesn't feel like a completely black/empty screen */
+}
+
+.hero-content {
+  position: relative;
+  z-index: 2;
+}
+
+/* Usage / SaaS chrome */
+.usage-bar {
+  height: 3px;
+  background: var(--border-color);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.usage-fill {
+  height: 100%;
+  background: linear-gradient(to right, var(--cool-cyan), var(--electric-violet));
+  transition: width 0.4s ease;
+}
+
+.user-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 4px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.user-pill:hover {
+  border-color: var(--cool-cyan);
+}
+
+/* Gallery */
+.shader-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+  cursor: pointer;
+}
+
+.shader-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--cool-cyan);
+}
+
+.shader-thumb {
+  aspect-ratio: 16 / 9;
+  background: #000;
+  position: relative;
+  overflow: hidden;
+}
+
+.shader-thumb canvas {
+  width: 100%;
+  height: 100%;
+}
+
+/* Toaster customization for cyber theme */
+[data-sonner-toaster] {
+  --normal-bg: var(--bg-secondary);
+  --normal-text: var(--text-primary);
+  --normal-border: var(--border-color);
+}
+
+/* Global subtle grain / noise for premium non-flat surfaces (high-end technique) */
+/* Global subtle grain (scoped, lower z so it doesn't fight toasts/modals) */
+.grain {
+  position: relative;
+}
+.grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background-image: 
+    radial-gradient(rgba(255,255,255,0.028) 0.8px, transparent 0);
+  background-size: 4px 4px;
+  mix-blend-mode: screen;
+  border-radius: inherit;
+  opacity: 0.7;
+}
+
+/* ============================================
+   PROFESSIONAL TYPOGRAPHY UPGRADES (redesign)
+   ============================================ */
+
+/* Headlines — presence, not generic */
+h1, .display {
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 0.92;
+  text-wrap: balance;
+}
+
+h2, .section-title {
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.05;
+  text-wrap: balance;
+}
+
+/* Body — readable, not too wide */
+p, .prose {
+  max-width: 65ch;
+  line-height: 1.65;
+}
+
+/* Subtle hierarchy with more weights */
+.text-medium { font-weight: 500; }
+.text-semibold { font-weight: 600; }
+
+/* Data / mono numbers — tabular */
+.tabular, .stat, code, .mono-data {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Small labels / badges — premium, not all-caps shouting */
+.label, .badge, .eyebrow {
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+/* Optical adjustments for icons next to text (common in nav/buttons) */
+.icon-label {
+  /* Small optical nudge so icons sit on the baseline correctly */
+  transform: translateY(-0.5px);
+}
+
+/* Remove generic AI all-caps where possible; use sentence or title case with tracking */
+.eyebrow:not(.force-caps) {
+  text-transform: none;
+  letter-spacing: 0.8px;
+  font-style: italic;
+  font-weight: 400;
+  opacity: 0.85;
 }

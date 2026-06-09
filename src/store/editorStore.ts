@@ -38,7 +38,7 @@ interface EditorState {
   reset: () => void;
 }
 
-const DEFAULT_CODE = `// ShaderForge - Shadertoy-style shader editor
+const DEFAULT_CODE = `// ShaderLumen - Shadertoy-style shader editor
 // Use mainImage() function with iTime, iResolution, iMouse uniforms
 
 precision mediump float;

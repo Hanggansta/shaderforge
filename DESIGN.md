@@ -1,4 +1,4 @@
-# ShaderForge DESIGN.md
+# ShaderLumen DESIGN.md
 
 > **V1 范围**：跑通最小闭环（Input prompt → 编译通过 ShaderToy code + 多帧截图）。
 > **V1-V5 roadmap / 验收标准**：[CLAUDE.md](./CLAUDE.md)。
@@ -47,7 +47,7 @@ V1 抗目标（**别做这些**）：
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ 1. 打开 ShaderForge                                          │
+│ 1. 打开 ShaderLumen                                          │
 │    - 看到 Preview（黑屏 / 上次保存的 shader）                  │
 │    - Editor（内置 template）                                  │
 │    - AI Chat（10 个 preset 列表）                             │

@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { ShaderAgentService } from '../integration/service';
 import { __resetRunsStore } from '../runs/runs';
 import type { VisualCard } from '../schemas/visual-card';
+import type { AgentProgress } from '../integration/agent-result-types';
 
 const NEBULA_SPEC: VisualCard = {
   intent: 'create',
@@ -47,6 +48,32 @@ describe('ShaderAgentService', () => {
     expect(typeof result.success).toBe('boolean');
     expect(Array.isArray(result.progress)).toBe(true);
     expect(result.progress.length).toBeGreaterThan(0);
+  }, 30_000);
+
+  it('generateAsAgentResult terminal progress matches compile outcome', async () => {
+    const progress: AgentProgress[] = [];
+    const result = await svc.generateAsAgentResult('a purple nebula', {
+      maxAttempts: 1,
+      onProgress: (p) => progress.push(p),
+    });
+    expect(progress.length).toBeGreaterThan(0);
+    const last = progress[progress.length - 1];
+    expect(typeof result.success).toBe('boolean');
+    expect(last.status).toBe(result.success ? 'success' : 'failed');
+  }, 30_000);
+
+  it('generate passes initialCode seed through to workflow', async () => {
+    const seed = `precision mediump float;
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+  fragColor = vec4(0.0, 0.5, 1.0, 1.0);
+}`;
+    const result = await svc.generate('seeded shader', {
+      maxAttempts: 1,
+      initialCode: seed,
+      initialRawResponse: 'best-of-n-winner',
+    });
+    expect(result.code).toContain('void mainImage');
+    expect(result.code).toContain('fragColor = vec4(0.0, 0.5, 1.0');
   }, 30_000);
 
   it('patchAsAgentResult returns the legacy AgentResult shape', async () => {

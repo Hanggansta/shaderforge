@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAIStore, MIN_MAX_ATTEMPTS, MAX_MAX_ATTEMPTS, type TelemetryStats } from '../../store/aiStore';
+import { useUsageStore } from '../../store/usageStore';
 import { shaderAgent } from '../../shader-agent/integration/service';
 import { OpenAICompatibleProvider } from '../../shader-agent/integration/providers/openai-compatible';
 import { MockAIProvider } from '../../shader-agent/integration/providers/mock';
@@ -90,6 +91,10 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
   const maxAttempts = useAIStore((s) => s.maxAttempts);
   const setMaxAttempts = useAIStore((s) => s.setMaxAttempts);
   const telemetryStats = useAIStore((s) => s.telemetryStats);
+  const visualPolishEnabled = useAIStore((s) => s.visualPolishEnabled);
+  const setVisualPolishEnabled = useAIStore((s) => s.setVisualPolishEnabled);
+  const tier = useUsageStore((s) => s.tier);
+  const isFreeTier = tier === 'free';
 
   useEffect(() => {
     if (isOpen) {
@@ -445,6 +450,46 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
             and keep the one that best matches your intent. Higher = better visual
             quality, more API tokens.
           </p>
+        </div>
+
+        {/* Post-success visual polish (Pro) */}
+        <div style={{ marginBottom: 20 }}>
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 10,
+              padding: '10px 12px',
+              background: visualPolishEnabled && !isFreeTier ? 'var(--bg-tertiary)' : 'transparent',
+              border: `1px solid ${visualPolishEnabled && !isFreeTier ? 'var(--accent-blue)' : 'var(--border-color)'}`,
+              borderRadius: 6,
+              cursor: isFreeTier ? 'not-allowed' : 'pointer',
+              opacity: isFreeTier ? 0.7 : 1,
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={visualPolishEnabled && !isFreeTier}
+              disabled={isFreeTier}
+              onChange={(e) => setVisualPolishEnabled(e.target.checked)}
+              data-testid="visual-polish-toggle"
+              style={{ accentColor: 'var(--accent-blue)', marginTop: 2 }}
+            />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                Post-success visual polish
+              </div>
+              <p style={{
+                fontSize: 11,
+                color: 'var(--text-secondary)',
+                marginTop: 4,
+                lineHeight: 1.45,
+              }}>
+                After a shader compiles, run an extra pass to refine composition and color.
+                Uses more tokens. {isFreeTier ? 'Available on Pro.' : 'Recommended for final-quality output.'}
+              </p>
+            </div>
+          </label>
         </div>
 
         {/* V2: Compile Retry Attempts */}

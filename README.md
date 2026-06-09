@@ -1,4 +1,4 @@
-# ShaderForge
+# ShaderLumen
 
 Browser-based Shadertoy-style GLSL shader editor with AI-assisted shader generation.
 
@@ -7,9 +7,9 @@ Browser-based Shadertoy-style GLSL shader editor with AI-assisted shader generat
 > V1-V5 roadmap / 验收标准：[CLAUDE.md](./CLAUDE.md)。
 > 设计语言：[DESIGN.md](./DESIGN.md)。
 
-## What ShaderForge Does (V1)
+## What ShaderLumen Does (V1)
 
-ShaderForge turns a natural-language prompt into a runnable GLSL shader, compiles it in the browser via WebGL2, and renders multi-frame screenshots — all through a fixed 5-step agent workflow.
+ShaderLumen turns a natural-language prompt into a runnable GLSL shader, compiles it in the browser via WebGL2, and renders multi-frame screenshots — all through a fixed 5-step agent workflow.
 
 ```
 User Prompt
@@ -51,7 +51,7 @@ npm test           # Vitest (34 tests across 5 files)
 
 ## AI Provider Setup
 
-ShaderForge ships with a `Mock` provider for zero-config testing.
+ShaderLumen ships with a `Mock` provider for zero-config testing.
 
 For real LLM usage:
 

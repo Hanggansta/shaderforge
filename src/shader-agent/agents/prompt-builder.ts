@@ -16,6 +16,7 @@ import { getCapabilitiesSummary } from '../tools/renderer-capabilities';
 import type { ShaderSpec } from '../schemas/shader-spec';
 import type { TechniquePlan } from './technique-plan';
 import type { AnalyzedError } from '../tools/error-analyzer';
+import { formatErrorsForAI } from '../tools/error-analyzer';
 import type { GoldenShaderExample } from '../tools/golden-shader';
 
 export interface PromptContext {
@@ -72,14 +73,19 @@ ${ctx.spec.constraints.allowTextures ? '' : '- No texture/sampler2D support (mat
 
 ${specLines.join('\n')}
 
-VISUAL QUALITY RULES (from DESIGN.md):
-- A shader must have visual intention. Compiling is not enough.
-- Create visual impact: strong contrast, rich colors, clear focal point, layered detail.
-- Do NOT produce dull, washed-out, or low-contrast output unless the user explicitly asks for it.
-- The material type should be visually recognizable — make it look like something.
-- Depth should feel spatial — use lighting, fog, parallax, or raymarching.
-- Motion should feel alive — rhythm, easing, flow, not random jitter.
-- Color should be intentional — controlled palettes with contrast, accent, temperature.`);
+VISUAL QUALITY RULES (PERFECTION RUBRIC — from DESIGN.md):
+- A shader must have strong visual intention. "It compiles and is not black" is NOT acceptable.
+- PERFECTION TARGETS (the LLM must internally maximize these before final output):
+  * High visual impact: strong contrast, rich/saturated colors, clear focal point, layered depth/detail.
+  * Never dull, washed-out, flat, or low-contrast unless the spec explicitly demands minimalism.
+  * Material must be recognizable and beautiful (looks like real plasma/liquid/metal/crystal/nebula/fire/etc.).
+  * Depth/spatial feeling: use lighting, fog, parallax, volume, or raymarching where appropriate.
+  * Motion alive and physical: rhythm, easing, flow, organic behavior — not jitter or static when animation requested.
+  * Exact palette fidelity + good brightness/contrast balance matching the requested mood.
+- SELF-VERIFICATION STEP (do this mentally before emitting code):
+  1. Does the code satisfy every field in the SHADER SPECIFICATION above?
+  2. Will the rendered result score high on brightness, contrast, color alignment, and motion (per visual scorer)?
+  3. If any target is weak, adjust noise, loops, palettes, or structure to fix it NOW.`);
 
   sections.push(`=== TECHNIQUE PLAN (implementation strategy — follow this) ===
 
@@ -124,13 +130,13 @@ export function buildContextualFixPrompt(
   const systemPrompt = buildWeightedSystemPrompt(ctx);
   const targetedInstructions = buildTargetedFixInstructions(errors);
 
-  const errorList = errors
+  const errorList = formatErrorsForAI ? formatErrorsForAI(errors as any) : errors // eslint-disable-line @typescript-eslint/no-explicit-any
     .map((e) => `Line ${e.line}: [${e.errorType}] ${e.rawMessage}\n  Fix: ${e.fixDirection}`)
     .join('\n');
 
-  const fixPrompt = `The shader code has compilation errors. Fix ONLY these specific errors, do not rewrite the entire shader.
+  const fixPrompt = `The shader code has compilation errors. Fix ONLY these specific errors — do not rewrite unrelated parts.
 
-ERRORS:
+DETAILED ERRORS + ANALYSIS:
 ${errorList}
 
 ${targetedInstructions}
@@ -138,8 +144,10 @@ ${targetedInstructions}
 CURRENT CODE:
 ${code}
 
-IMPORTANT: Preserve the visual intent from the shader spec. Do not change the scene type, mood, or color palette.
-Output the COMPLETE fixed shader code. Do not skip any parts.`;
+CRITICAL:
+- Preserve the visual intent from the Shader Specification 100% (scene, mood, palette, motion, material).
+- After fixing the errors, mentally re-check against the PERFECTION RUBRIC above.
+- Output the COMPLETE fixed shader code. Do not skip sections.`;
 
   return `${systemPrompt}\n\n${fixPrompt}`;
 }

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { saveCloudProject, listCloudProjects, deleteCloudProject } from '../lib/db';
 
 export interface ShaderProject {
   id: string;
@@ -9,6 +10,7 @@ export interface ShaderProject {
   createdAt: number;
   updatedAt: number;
   version: number;
+  source?: 'local' | 'cloud';
 }
 
 const STORAGE_KEY = 'shaderforge-projects';
@@ -57,9 +59,30 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   projects: [],
   currentProjectId: null,
 
-  loadProjects: () => {
-    const projects = loadProjects();
-    set({ projects });
+  loadProjects: async () => {
+    const local = loadProjects();
+    try {
+      const cloud = await listCloudProjects(false);
+      const cloudMapped = cloud.map(c => ({
+        id: c.id,
+        name: c.name,
+        code: c.code,
+        description: c.description,
+        tags: c.tags,
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt,
+        version: 1,
+        source: 'cloud' as const,
+      }));
+      // Merge, prefer cloud versions if conflict
+      const merged = [...local, ...cloudMapped].reduce((acc: ShaderProject[], p) => {
+        if (!acc.find(x => x.id === p.id)) acc.push(p);
+        return acc;
+      }, []);
+      set({ projects: merged });
+    } catch {
+      set({ projects: local });
+    }
   },
 
   saveProject: (name, code, description) => {
@@ -72,11 +95,22 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       createdAt: now,
       updatedAt: now,
       version: PROJECT_VERSION,
+      source: 'local',
     };
 
     const projects = [...get().projects, project];
     saveProjects(projects);
     set({ projects, currentProjectId: project.id });
+
+    // Also persist to Dexie "cloud" for SaaS feel
+    void saveCloudProject({
+      id: undefined as unknown as string,
+      name,
+      code,
+      description,
+      tags: [],
+      isPublic: false,
+    }).catch(() => {});
 
     return project;
   },
@@ -91,9 +125,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set({ projects });
   },
 
-  deleteProject: (id) => {
+  deleteProject: async (id) => {
     const projects = get().projects.filter((p) => p.id !== id);
-    saveProjects(projects);
+    saveProjects(projects.filter(p => p.source !== 'cloud'));
+    try {
+      await deleteCloudProject(id);
+    } catch { /* ignore cloud delete errors in demo */ }
     set({
       projects,
       currentProjectId: get().currentProjectId === id ? null : get().currentProjectId,

@@ -1,0 +1,11 @@
+node_modules
+dist
+data
+mcps
+terminals
+.claude
+.playwright-mcp
+all_codes.zip
+*.png
+!public/**/*.png
+.git

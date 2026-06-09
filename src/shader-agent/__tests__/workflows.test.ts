@@ -68,6 +68,22 @@ describe('Generate Workflow', () => {
     const result = await generateShader('test', { llm: null, provider: null, maxAttempts: 1 });
     expect(result.attempts).toBe(1);
   }, 30_000);
+
+  it('uses initialCode seed and skips first-pass Code Agent', async () => {
+    const seed = `precision mediump float;
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+  fragColor = vec4(1.0, 0.0, 0.0, 1.0);
+}`;
+    const result = await generateShader('test', {
+      llm: null,
+      provider: null,
+      maxAttempts: 1,
+      initialCode: seed,
+      initialRawResponse: 'seeded-candidate',
+    });
+    expect(result.code).toContain('void mainImage');
+    expect(result.code).toContain('fragColor = vec4(1.0, 0.0, 0.0');
+  }, 30_000);
 });
 
 describe('Patch Workflow', () => {

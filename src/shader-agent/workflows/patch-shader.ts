@@ -13,12 +13,15 @@ import { runCodePatchAgent } from '../agents/code-patch-agent';
 import { selectReferences } from '../tools/reference-selector';
 import { runCompileFixLoop, type CompileAttemptEvent } from './compile-fix-loop';
 import { runsStore, type RunArtifact } from '../runs/runs';
+import { assertNotAborted, type WorkflowStepEvent } from '../integration/workflow-progress';
 
 export interface PatchOptions {
   llm: LLMClient | null;
   provider: AIProvider | null;
   maxAttempts?: number;
   runId?: string;
+  signal?: AbortSignal;
+  onWorkflowStep?: (event: WorkflowStepEvent) => void;
   /** Per-attempt observer forwarded to the compile-fix loop. */
   onAttempt?: (event: CompileAttemptEvent) => void;
 }
@@ -37,9 +40,19 @@ export async function patchShader(
   const maxAttempts = options.maxAttempts ?? 3;
   const runId = options.runId ?? `patch-${Date.now()}-${Math.floor(Math.random() * 1e6).toString(36)}`;
 
+  const emitStep = options.onWorkflowStep;
+  const signal = options.signal;
+
+  assertNotAborted(signal);
+  emitStep?.({ step: 'shader_planner', message: 'Planning patch modules…' });
   const shaderPlan: ShaderPlan = runShaderPlanner({ visualCard });
+
+  assertNotAborted(signal);
+  emitStep?.({ step: 'reference_selector', message: 'Selecting references for patch…' });
   const { cards: references } = selectReferences(visualCard, shaderPlan);
 
+  assertNotAborted(signal);
+  emitStep?.({ step: 'code_agent', message: 'Applying patch…' });
   const patched = await runCodePatchAgent(
     {
       mode: 'fix_user_feedback',

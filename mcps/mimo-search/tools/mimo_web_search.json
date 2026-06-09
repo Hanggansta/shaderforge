@@ -1,0 +1,33 @@
+{
+  "name": "mimo_web_search",
+  "description": "Search the live web using Xiaomi MiMo official Web Search (OpenAI-compatible API). Returns factual results with source URLs and summaries. Use for: current events, trending data, product info, technical questions, any real-time information. The source annotations often contain the exact data you need — always check them.",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "Search query. Be specific. Include dates, version numbers, or \"today\" for time-sensitive queries."
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 10,
+        "description": "Max search results. Default: 10. More results = higher chance of finding specific data."
+      },
+      "max_keyword": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 10,
+        "description": "Max parallel search keywords. Higher = broader but slower. Default: 5."
+      },
+      "force_search": {
+        "type": "boolean",
+        "description": "Force web search even if model thinks it can answer directly. Default: true."
+      }
+    },
+    "required": [
+      "query"
+    ]
+  }
+}

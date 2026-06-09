@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import type { AIIntent } from '../shader-agent/integration/types/ai-provider';
+import type { VisualCard } from '../shader-agent/schemas/visual-card';
 
 const CANDIDATE_COUNT_KEY = 'shaderforge-ai-candidate-count';
-const DEFAULT_CANDIDATE_COUNT = 1;
+export const DEFAULT_CANDIDATE_COUNT = 1;
 const MIN_CANDIDATE_COUNT = 1;
 const MAX_CANDIDATE_COUNT = 3;
 
@@ -12,6 +13,51 @@ const MIN_MAX_ATTEMPTS = 1;
 const MAX_MAX_ATTEMPTS = 5;
 
 const STATS_KEY = 'shaderforge-ai-telemetry-stats';
+const VISUAL_POLISH_KEY = 'shaderforge-visual-polish';
+const RUN_CONTEXT_KEY = 'shaderforge-run-context';
+
+function loadVisualPolish(): boolean {
+  try {
+    return localStorage.getItem(VISUAL_POLISH_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function persistVisualPolish(enabled: boolean): void {
+  try {
+    localStorage.setItem(VISUAL_POLISH_KEY, enabled ? '1' : '0');
+  } catch {
+    // ignore
+  }
+}
+
+interface PersistedRunContext {
+  visualCard: VisualCard;
+  runId: string;
+}
+
+function loadRunContext(): PersistedRunContext | null {
+  try {
+    const raw = sessionStorage.getItem(RUN_CONTEXT_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as PersistedRunContext;
+  } catch {
+    return null;
+  }
+}
+
+function persistRunContext(ctx: PersistedRunContext | null): void {
+  try {
+    if (!ctx) {
+      sessionStorage.removeItem(RUN_CONTEXT_KEY);
+      return;
+    }
+    sessionStorage.setItem(RUN_CONTEXT_KEY, JSON.stringify(ctx));
+  } catch {
+    // ignore
+  }
+}
 const EMPTY_STATS: TelemetryStats = {
   totalRuns: 0,
   firstAttemptSuccess: 0,
@@ -179,6 +225,11 @@ interface AIState {
    * Updated by AIChatPanel after each generation completes.
    */
   telemetryStats: TelemetryStats;
+  /** Last successful run context — used for modify/fix intents. */
+  lastVisualCard: VisualCard | null;
+  lastRunId: string | null;
+  /** Post-success visual polish pass (Pro recommended). Off by default on free tier. */
+  visualPolishEnabled: boolean;
 
   // Actions
   addMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
@@ -190,6 +241,8 @@ interface AIState {
   setCandidateCount: (count: number) => void;
   setMaxAttempts: (value: number) => void;
   recordRunResult: (success: boolean, attempts: number) => void;
+  setLastRunContext: (visualCard: VisualCard | null, runId: string | null) => void;
+  setVisualPolishEnabled: (enabled: boolean) => void;
   clearMessages: () => void;
   reset: () => void;
 }
@@ -199,7 +252,7 @@ export const useAIStore = create<AIState>((set, get) => ({
     {
       id: 'welcome',
       role: 'system',
-      content: 'Welcome to ShaderForge AI! Describe a shader you want to create, or select an intent mode to work with your current code.',
+      content: 'Welcome to ShaderLumen AI! Describe a shader you want to create, or select an intent mode to work with your current code.',
       timestamp: Date.now(),
     },
   ],
@@ -211,6 +264,9 @@ export const useAIStore = create<AIState>((set, get) => ({
   candidateCount: loadCandidateCount(),
   maxAttempts: loadMaxAttempts(),
   telemetryStats: loadStats(),
+  lastVisualCard: loadRunContext()?.visualCard ?? null,
+  lastRunId: loadRunContext()?.runId ?? null,
+  visualPolishEnabled: loadVisualPolish(),
 
   addMessage: (message) => set((state) => ({
     messages: [
@@ -260,6 +316,20 @@ export const useAIStore = create<AIState>((set, get) => ({
     set({ telemetryStats: next });
   },
 
+  setLastRunContext: (visualCard, runId) => {
+    if (visualCard && runId) {
+      persistRunContext({ visualCard, runId });
+    } else {
+      persistRunContext(null);
+    }
+    set({ lastVisualCard: visualCard, lastRunId: runId });
+  },
+
+  setVisualPolishEnabled: (enabled) => {
+    persistVisualPolish(enabled);
+    set({ visualPolishEnabled: enabled });
+  },
+
   clearMessages: () => set({
     messages: [
       {
@@ -276,7 +346,7 @@ export const useAIStore = create<AIState>((set, get) => ({
       {
         id: 'welcome',
         role: 'system',
-        content: 'Welcome to ShaderForge AI! Describe a shader you want to create, or select an intent mode to work with your current code.',
+        content: 'Welcome to ShaderLumen AI! Describe a shader you want to create, or select an intent mode to work with your current code.',
         timestamp: Date.now(),
       },
     ],

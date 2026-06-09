@@ -12,10 +12,12 @@ import type { GenerateResult } from '../workflows/generate-shader';
 import type { PatchResult } from '../workflows/patch-shader';
 import type { AIIntent } from './types/ai-provider';
 import type { CompileError } from '../schemas/compile-report';
+import { buildGenerationSummary, buildTelemetrySummary } from './result-metadata';
 
 interface AdaptOptions {
   detectedIntent?: AIIntent;
   intent?: AIIntent;
+  candidateCount?: number;
 }
 
 function progressFromCompileAttempts(
@@ -64,6 +66,8 @@ export function adaptGenerateResult(
       : [result.compileReport]
   );
 
+  const telemetry = buildTelemetrySummary(result);
+
   return {
     code: result.code,
     success: ok,
@@ -71,6 +75,10 @@ export function adaptGenerateResult(
     errors: ok ? undefined : errorsFromCompile(result.compileReport),
     progress,
     detectedIntent: options.detectedIntent ?? options.intent,
+    generationSummary: buildGenerationSummary(result, { candidateCount: options.candidateCount }),
+    ...(telemetry ? { telemetry } : {}),
+    runId: result.runId,
+    visualCard: result.visualCard,
   };
 }
 
@@ -85,6 +93,8 @@ export function adaptPatchResult(
       : [result.compileReport]
   );
 
+  const telemetry = buildTelemetrySummary(result);
+
   return {
     code: result.code,
     success: ok,
@@ -92,5 +102,9 @@ export function adaptPatchResult(
     errors: ok ? undefined : errorsFromCompile(result.compileReport),
     progress,
     detectedIntent: options.detectedIntent ?? options.intent,
+    generationSummary: buildGenerationSummary(result),
+    ...(telemetry ? { telemetry } : {}),
+    runId: result.runId,
+    visualCard: result.visualCard,
   };
 }

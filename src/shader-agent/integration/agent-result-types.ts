@@ -8,6 +8,9 @@
 
 import type { AIIntent } from './types/ai-provider';
 import type { ShaderCandidate } from './types/ai-provider';
+import type { WorkflowStepId } from './workflow-progress';
+import type { GenerationSummary, TelemetrySummary } from '../../store/aiStore';
+import type { VisualCard } from '../schemas/visual-card';
 
 export type AgentStatus =
   | 'idle' | 'generating' | 'cleaning' | 'validating'
@@ -19,6 +22,7 @@ export interface AgentProgress {
   maxAttempts: number;
   message: string;
   details?: string;
+  pipelineStep?: WorkflowStepId;
   specSummary?: {
     intent: string;
     scene: string;
@@ -50,4 +54,8 @@ export interface AgentResult {
   fallbackId?: string;
   candidates?: ShaderCandidate[];
   selectedCandidateId?: string;
+  generationSummary?: GenerationSummary;
+  telemetry?: TelemetrySummary;
+  runId?: string;
+  visualCard?: VisualCard;
 }

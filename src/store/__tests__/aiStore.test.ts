@@ -10,12 +10,19 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   clampMaxAttempts,
+  DEFAULT_CANDIDATE_COUNT,
   DEFAULT_MAX_ATTEMPTS,
   MAX_MAX_ATTEMPTS,
   MIN_MAX_ATTEMPTS,
   applyRunResult,
   type TelemetryStats,
 } from '../aiStore';
+
+describe('candidate count defaults', () => {
+  it('defaults to 1 (not forced to 3)', () => {
+    expect(DEFAULT_CANDIDATE_COUNT).toBe(1);
+  });
+});
 
 describe('clampMaxAttempts', () => {
   beforeEach(() => {

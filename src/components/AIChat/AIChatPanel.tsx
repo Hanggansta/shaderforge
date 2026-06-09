@@ -1,13 +1,18 @@
 import { useState, useCallback, useRef } from 'react';
 import { useEditorStore } from '../../store/editorStore';
 import { useAIStore, type ChatMessage } from '../../store/aiStore';
-import { shaderAgent } from '../../shader-agent/integration/service';
+import { useUsageStore } from '../../store/usageStore';
+import { shaderAgent, intentCountsTowardQuota } from '../../shader-agent/integration/service';
+import { resolveIntent } from '../../shader-agent/integration/intent-router';
 import type { AgentProgress } from '../../shader-agent/integration/agent-result-types';
+import { WORKFLOW_STEP_LABELS } from '../../shader-agent/integration/workflow-progress';
+import { recordGenerationRun } from '../../lib/db';
 import { normalizeProviderError } from '../../shader-agent/integration/types/provider-errors';
 import { PRESETS } from '../../shader-agent/presets';
 import { SettingsPanel } from '../Settings/SettingsPanel';
 import type { AIIntent } from '../../shader-agent/integration/types/ai-provider';
 import { buildManualFixPrompt, type ManualFixInput } from './manual-fix-prompt';
+import { toast } from 'sonner';
 
 interface FailedContext {
   prompt: string;
@@ -71,9 +76,12 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
   const isLoading = requestState === 'loading';
 
   const handleProgress = useCallback((progress: AgentProgress) => {
-    const baseLabel = PROGRESS_LABELS[progress.status] || progress.status;
+    const stepLabel = progress.pipelineStep
+      ? WORKFLOW_STEP_LABELS[progress.pipelineStep]
+      : null;
+    const baseLabel = stepLabel ?? PROGRESS_LABELS[progress.status] ?? progress.status;
     const label =
-      progress.attempt > 0 && progress.maxAttempts > 0
+      progress.attempt > 0 && progress.maxAttempts > 0 && (progress.status === 'compiling' || progress.status === 'fixing')
         ? `${baseLabel} ${progress.attempt}/${progress.maxAttempts}`
         : baseLabel;
     const details = progress.details ?? progress.message;
@@ -104,6 +112,41 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
 
     if (!prompt.trim() || isLoading) return;
 
+    const editorCode = useEditorStore.getState().code;
+    const compileErrors = useEditorStore.getState().compileErrors;
+    const compileErrorLog = compileErrors
+      .map((e) => `Line ${e.line}: ${e.message}`)
+      .join('\n');
+    const hasSubstantialCode = editorCode.includes('void mainImage') && editorCode.length > 120;
+    const effectivePrompt =
+      intent === 'fix' && !prompt.trim() && compileErrorLog
+        ? 'Fix compile errors in the current shader'
+        : prompt;
+
+    const resolvedIntent = resolveIntent({
+      requested: intent,
+      hasCompileErrors: compileErrors.length > 0,
+      hasSubstantialCode,
+      prompt: effectivePrompt,
+    });
+    const countsQuota = intentCountsTowardQuota(resolvedIntent);
+
+    // === SaaS Quota Gate (productionized) ===
+    const usage = useUsageStore.getState();
+    usage.resetIfNeeded();
+    if (countsQuota && !usage.canGenerate()) {
+      toast.error('Free tier limit reached', {
+        description: 'You\'ve used your monthly generations. Upgrade to Pro for 200+ generations + priority reranking.',
+        action: {
+          label: 'Upgrade',
+          onClick: () => {
+            window.dispatchEvent(new CustomEvent('open-upgrade'));
+          },
+        },
+      });
+      return;
+    }
+
     const userMessage: Omit<ChatMessage, 'id' | 'timestamp'> = {
       role: 'user',
       content: prompt,
@@ -118,34 +161,103 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
     setLastFailedContext(null);
 
     try {
-      const result = await shaderAgent.generateAsAgentResult(
-        prompt,
+      const aiState = useAIStore.getState();
+      const candidateCount = aiState.candidateCount;
+      const tier = useUsageStore.getState().tier;
+      const enableVisualPolish = aiState.visualPolishEnabled && tier !== 'free';
+
+      const result = await shaderAgent.runIntent(
+        effectivePrompt,
+        intent,
+        {
+          currentCode: editorCode,
+          compileErrorLog: compileErrorLog || undefined,
+          visualCard: aiState.lastVisualCard,
+          hasSubstantialCode,
+        },
         {
           onProgress: handleProgress,
           maxAttempts,
-        }
+          candidateCount,
+          enableVisualPolish,
+        },
       );
 
       const msgIntent: AIIntent = result.detectedIntent ?? intent;
+
+      if (result.clarification) {
+        addMessage({ role: 'system', content: result.clarification });
+        setRequestState('idle');
+        return;
+      }
+
+      if (result.explanation && msgIntent === 'explain') {
+        addMessage({
+          role: 'assistant',
+          content: result.explanation,
+          intent: 'explain',
+          detectedIntent: 'explain',
+        });
+        setRequestState('idle');
+        return;
+      }
 
       if (result.success && result.code) {
         const requestId = `ai-${Date.now()}-${Math.floor(Math.random() * 1e6).toString(36)}`;
         setCodeFromAI(result.code, requestId);
 
-        const attemptNote = result.attempts > 1
-          ? ` (after ${result.attempts} attempts)`
-          : '';
+        const attemptNote = result.attempts > 1 ? ` (after ${result.attempts} attempts)` : '';
+        const actionLabel =
+          msgIntent === 'modify' ? 'Shader updated'
+            : msgIntent === 'fix' ? 'Shader fixed'
+              : msgIntent === 'optimize' ? 'Shader optimized'
+                : `Shader created`;
 
         addMessage({
           role: 'assistant',
-          content: `Shader created${attemptNote}`,
+          content: `${actionLabel}${attemptNote}`,
           code: result.code,
           intent: msgIntent,
           detectedIntent: result.detectedIntent,
+          ...(result.generationSummary ? { generationSummary: result.generationSummary } : {}),
+          ...(result.telemetry ? { telemetry: result.telemetry } : {}),
         });
+
+        if (result.visualCard && result.runId) {
+          useAIStore.getState().setLastRunContext(result.visualCard, result.runId);
+        }
+
+        if (result.runId && intentCountsTowardQuota(msgIntent)) {
+          void recordGenerationRun({
+            id: result.runId,
+            prompt: effectivePrompt,
+            finalCode: result.code,
+            visualScore: result.generationSummary?.visualScore,
+            attempts: result.attempts,
+            success: true,
+            candidateCount,
+          });
+        }
+
         recordRunResult(true, result.attempts);
         setLastFailedContext(null);
+
+        if (intentCountsTowardQuota(msgIntent)) {
+          useUsageStore.getState().incrementGeneration();
+        }
       } else {
+        recordRunResult(false, result.attempts);
+
+        if (result.runId && intentCountsTowardQuota(msgIntent)) {
+          void recordGenerationRun({
+            id: result.runId,
+            prompt: effectivePrompt,
+            attempts: result.attempts,
+            success: false,
+            candidateCount,
+          });
+        }
+
         if (result.errors && result.errors.length > 0) {
           const errorSummary = result.errors
             .slice(0, 3)
@@ -156,19 +268,23 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
             role: 'system',
             content: `Generation failed after ${result.attempts} attempts.\n${errorSummary}\n\nTry simplifying your description or select a preset.`,
           });
-          setLastFailedContext({ prompt, errorSummary });
+          setLastFailedContext({ prompt: effectivePrompt, errorSummary });
         } else {
           addMessage({
             role: 'system',
             content: 'Generation failed. Please try again or check your API settings.',
           });
-          setLastFailedContext({ prompt, errorSummary: 'No structured error captured.' });
+          setLastFailedContext({ prompt: effectivePrompt, errorSummary: 'No structured error captured.' });
         }
       }
 
       setRequestState('idle');
-      recordRunResult(false, result.attempts);
     } catch (error) {
+      if ((error as Error).name === 'AbortError') {
+        setRequestState('cancelled');
+        addMessage({ role: 'system', content: 'Request cancelled.' });
+        return;
+      }
       const providerError = normalizeProviderError(error);
       setLastError(providerError.message);
       setRequestState('error');
@@ -258,6 +374,9 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
               {providerName}
+            </span>
+            <span className="quota-badge tabular-nums">
+              {useUsageStore.getState().remaining()} left
             </span>
             <button
               onClick={() => setShowSettings(true)}
@@ -450,6 +569,23 @@ export function AIChatPanel({ style }: { style?: React.CSSProperties } = {}) {
                       >
                         Apply to Editor
                       </button>
+
+                      {msg.code && (
+                        <button
+                          className="link-inline"
+                          style={{ fontSize: 11 }}
+                          onClick={() => {
+                            // Visual Refine (V3 feature activated) — user can describe what they see
+                            const refinePrompt = `Improve the visual quality of the current shader. Focus on: better contrast, more interesting motion, stronger focal point, richer materials. What would you change?`;
+                            setInput(refinePrompt);
+                            // Switch to modify intent
+                            setActiveIntent('modify');
+                            textareaRef.current?.focus();
+                          }}
+                        >
+                          Visual Refine
+                        </button>
+                      )}
                       <button
                         className="toolbar-btn"
                         style={{ fontSize: 11 }}

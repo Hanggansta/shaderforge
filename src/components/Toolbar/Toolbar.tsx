@@ -1,9 +1,10 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useEditorStore } from '../../store/editorStore';
 import { usePreviewStore } from '../../store/previewStore';
 import { useProjectStore } from '../../store/projectStore';
 import { SHADER_TEMPLATES } from '../../templates';
-import { copyShareUrl, exportShaderAsGlsl, exportShaderAsJson, importShaderFromFile } from '../../utils/shareUrl';
+import { copyShareUrl, exportShaderAsGlsl, exportShaderAsJson, importShaderFromFile, exportShaderVideo } from '../../utils/shareUrl';
 
 export function Toolbar() {
   const [showTemplates, setShowTemplates] = useState(false);
@@ -59,9 +60,11 @@ export function Toolbar() {
   const handleShare = () => {
     const success = copyShareUrl(code);
     if (success) {
-      alert('Share URL copied to clipboard!');
+      toast.success('Share URL copied to clipboard');
     } else {
-      alert('Shader too large for URL. Use Export instead.');
+      toast.error('Shader too large for URL', {
+        description: 'Use Export GLSL or Export JSON instead.',
+      });
     }
   };
 
@@ -100,7 +103,7 @@ export function Toolbar() {
   return (
     <div className="toolbar">
       <div className="toolbar-left">
-        <span className="toolbar-logo">ShaderForge</span>
+        <span className="toolbar-logo">ShaderLumen</span>
         <div style={{ position: 'relative' }}>
           <button
             className="toolbar-btn"
@@ -167,6 +170,19 @@ export function Toolbar() {
         </button>
         <button className="toolbar-btn" onClick={handleImport}>
           📂 Import
+        </button>
+        <button 
+          className="toolbar-btn" 
+          title="Export 6-second WebM loop of the live preview (premium SaaS feature)"
+          onClick={async () => {
+            const canvas = document.querySelector('canvas') as HTMLCanvasElement | null;
+            const success = await exportShaderVideo(canvas, useProjectStore.getState().getCurrentProject()?.name || 'shader', 6);
+            if (success) {
+              // success handled inside util
+            }
+          }}
+        >
+          🎥 Export Video
         </button>
       </div>
       <div className="toolbar-right">
