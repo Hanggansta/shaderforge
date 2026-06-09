@@ -6,13 +6,13 @@ export default defineConfig(({ mode }) => {
   // Vercel often sets OPENAI_API_KEY; Vite client needs VITE_* at build time.
   const env = loadEnv(mode, process.cwd(), '')
   const openaiKey = env.VITE_OPENAI_API_KEY || env.OPENAI_API_KEY || ''
-  const deepseekKey = env.VITE_DEEPSEEK_API_KEY || env.DEEPSEEK_API_KEY || ''
+  const openaiModel = env.VITE_OPENAI_MODEL || 'gpt-5.4-mini'
 
   return {
   plugins: [react()],
   define: {
     ...(openaiKey ? { 'import.meta.env.VITE_OPENAI_API_KEY': JSON.stringify(openaiKey) } : {}),
-    ...(deepseekKey ? { 'import.meta.env.VITE_DEEPSEEK_API_KEY': JSON.stringify(deepseekKey) } : {}),
+    'import.meta.env.VITE_OPENAI_MODEL': JSON.stringify(openaiModel),
   },
   build: {
     chunkSizeWarningLimit: 600,

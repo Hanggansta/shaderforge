@@ -14,9 +14,7 @@ export default function handler(_req: VercelRequest, res: VercelResponse) {
       openai:
         Boolean(process.env.VITE_OPENAI_API_KEY)
         || Boolean(process.env.OPENAI_API_KEY),
-      deepseek:
-        Boolean(process.env.VITE_DEEPSEEK_API_KEY)
-        || Boolean(process.env.DEEPSEEK_API_KEY),
+      model: process.env.VITE_OPENAI_MODEL || 'gpt-5.4-mini',
     },
     client: {
       creemCheckoutPro: Boolean(process.env.VITE_CREEM_CHECKOUT_PRO_URL),

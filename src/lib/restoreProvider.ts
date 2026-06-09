@@ -2,6 +2,7 @@ import { useAIStore } from '../store/aiStore';
 import { shaderAgent } from '../shader-agent/integration/service';
 import { OpenAICompatibleProvider } from '../shader-agent/integration/providers/openai-compatible';
 import { MockAIProvider } from '../shader-agent/integration/providers/mock';
+import { resolveOpenAIApiKey, resolveOpenAIModel } from './ai-config';
 
 const SETTINGS_KEY = 'shaderforge-ai-settings';
 
@@ -19,36 +20,28 @@ export function restoreSavedProvider(): boolean {
       if (settings.provider === 'mock') {
         shaderAgent.setProvider(new MockAIProvider());
         useAIStore.getState().setProvider('Mock AI', 'mock-v1');
-      } else if (settings.provider && settings.apiKey) {
-        const provider = settings.provider === 'custom'
-          ? new OpenAICompatibleProvider('custom', {
-              apiKey: settings.apiKey,
-              baseUrl: settings.baseUrl,
-              model: settings.model,
-            })
-          : OpenAICompatibleProvider.createPreset(settings.provider, settings.apiKey);
-        shaderAgent.setProvider(provider);
-        useAIStore.getState().setProvider(settings.provider, settings.model || 'default');
+        return true;
       }
-      return true;
+      if (settings.provider === 'openai') {
+        const apiKey = settings.apiKey.trim() || resolveOpenAIApiKey();
+        if (!apiKey) return false;
+        const model = settings.model.trim() || resolveOpenAIModel();
+        const provider = OpenAICompatibleProvider.createOpenAI(apiKey, model);
+        shaderAgent.setProvider(provider);
+        useAIStore.getState().setProvider('OpenAI', model);
+        return true;
+      }
     }
   } catch {
     // ignore
   }
 
-  const openaiKey = import.meta.env.VITE_OPENAI_API_KEY;
-  if (openaiKey && openaiKey !== 'your_openai_api_key_here') {
-    const provider = OpenAICompatibleProvider.createPreset('openai', openaiKey);
+  const openaiKey = resolveOpenAIApiKey();
+  if (openaiKey) {
+    const model = resolveOpenAIModel();
+    const provider = OpenAICompatibleProvider.createOpenAI(openaiKey, model);
     shaderAgent.setProvider(provider);
-    useAIStore.getState().setProvider('OpenAI', 'gpt-4o-mini');
-    return true;
-  }
-
-  const deepseekKey = import.meta.env.VITE_DEEPSEEK_API_KEY;
-  if (deepseekKey && deepseekKey !== 'your_api_key_here') {
-    const provider = OpenAICompatibleProvider.createPreset('deepseek', deepseekKey);
-    shaderAgent.setProvider(provider);
-    useAIStore.getState().setProvider('DeepSeek', 'deepseek-v4-pro');
+    useAIStore.getState().setProvider('OpenAI', model);
     return true;
   }
 

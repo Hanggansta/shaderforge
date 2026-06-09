@@ -9,6 +9,7 @@
  */
 
 import type { AIProvider, AIResponse, ShaderContext } from '../types/ai-provider';
+import { DEFAULT_OPENAI_MODEL, OPENAI_API_BASE } from '../../../lib/ai-config';
 
 export interface OpenAICompatibleConfig {
   apiKey: string;
@@ -18,7 +19,7 @@ export interface OpenAICompatibleConfig {
 
 const DEFAULT_CONFIGS: Record<string, { baseUrl: string; model: string }> = {
   deepseek: { baseUrl: 'https://api.deepseek.com', model: 'deepseek-v4-pro' },
-  openai:   { baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
+  openai:   { baseUrl: OPENAI_API_BASE, model: DEFAULT_OPENAI_MODEL },
   groq:     { baseUrl: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' },
   together: { baseUrl: 'https://api.together.xyz/v1', model: 'meta-llama/Llama-3-70b-chat-hf' },
 };
@@ -60,10 +61,26 @@ export class OpenAICompatibleProvider implements AIProvider {
     this.config = config;
   }
 
-  static createPreset(preset: string, apiKey: string): OpenAICompatibleProvider {
+  static createPreset(
+    preset: string,
+    apiKey: string,
+    modelOverride?: string,
+  ): OpenAICompatibleProvider {
     const config = DEFAULT_CONFIGS[preset];
     if (!config) throw new Error(`Unknown provider preset: ${preset}`);
-    return new OpenAICompatibleProvider(preset, { apiKey, ...config });
+    return new OpenAICompatibleProvider(preset, {
+      apiKey,
+      baseUrl: config.baseUrl,
+      model: modelOverride?.trim() || config.model,
+    });
+  }
+
+  static createOpenAI(apiKey: string, model = DEFAULT_OPENAI_MODEL): OpenAICompatibleProvider {
+    return new OpenAICompatibleProvider('openai', {
+      apiKey,
+      baseUrl: OPENAI_API_BASE,
+      model,
+    });
   }
 
   static getPresets(): string[] {

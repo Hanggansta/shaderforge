@@ -5,6 +5,7 @@ import { shaderAgent } from '../../shader-agent/integration/service';
 import { OpenAICompatibleProvider } from '../../shader-agent/integration/providers/openai-compatible';
 import { MockAIProvider } from '../../shader-agent/integration/providers/mock';
 import { normalizeProviderError } from '../../shader-agent/integration/types/provider-errors';
+import { DEFAULT_OPENAI_MODEL, resolveOpenAIApiKey } from '../../lib/ai-config';
 
 function formatPercent(part: number, total: number): string {
   if (total === 0) return '—';
@@ -41,20 +42,9 @@ interface SettingsPanelProps {
 }
 
 const PROVIDER_PRESETS = [
-  { id: 'mock', name: 'Mock AI (Testing)', description: 'No API key needed' },
-  { id: 'deepseek', name: 'DeepSeek', description: 'deepseek-v4-pro' },
-  { id: 'openai', name: 'OpenAI', description: 'GPT-4o-mini, GPT-4o, etc.' },
-  { id: 'groq', name: 'Groq', description: 'Fast inference with Llama models' },
-  { id: 'together', name: 'Together AI', description: 'Open source models' },
-  { id: 'custom', name: 'Custom (OpenAI-compatible)', description: 'Any OpenAI-compatible API' },
+  { id: 'openai', name: 'OpenAI', description: DEFAULT_OPENAI_MODEL },
+  { id: 'mock', name: 'Mock AI (offline)', description: 'No API key — unit-style responses' },
 ];
-
-const PROVIDER_DEFAULT_MODELS: Record<string, string> = {
-  deepseek: 'deepseek-v4-pro',
-  openai: 'gpt-4o-mini',
-  groq: 'llama-3.3-70b-versatile',
-  together: 'meta-llama/Llama-3-70b-chat-hf',
-};
 
 const STORAGE_KEY = 'shaderforge-ai-settings';
 
@@ -70,7 +60,16 @@ function loadSettings(): AISettings {
     const data = localStorage.getItem(STORAGE_KEY);
     if (data) return JSON.parse(data);
   } catch { /* ignore parse errors */ }
-  return { provider: 'mock', apiKey: '', baseUrl: '', model: '' };
+  return {
+    provider: 'openai',
+    apiKey: '',
+    baseUrl: '',
+    model: DEFAULT_OPENAI_MODEL,
+  };
+}
+
+function resolveSettingsApiKey(settings: AISettings): string {
+  return settings.apiKey.trim() || resolveOpenAIApiKey() || '';
 }
 
 function saveSettings(settings: AISettings): void {
@@ -110,16 +109,11 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
       shaderAgent.setProvider(new MockAIProvider());
       setProvider('Mock AI', 'mock-v1');
     } else {
-      const provider = settings.provider === 'custom'
-        ? new OpenAICompatibleProvider('custom', {
-            apiKey: settings.apiKey,
-            baseUrl: settings.baseUrl,
-            model: settings.model,
-          })
-        : OpenAICompatibleProvider.createPreset(settings.provider, settings.apiKey);
-
+      const apiKey = resolveSettingsApiKey(settings);
+      const model = settings.model.trim() || DEFAULT_OPENAI_MODEL;
+      const provider = OpenAICompatibleProvider.createOpenAI(apiKey, model);
       shaderAgent.setProvider(provider);
-      setProvider(settings.provider, settings.model || 'default');
+      setProvider('OpenAI', model);
     }
 
     onClose();
@@ -130,17 +124,14 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
     setTestError('');
 
     try {
-      let provider: OpenAICompatibleProvider;
-
-      if (settings.provider === 'custom') {
-        provider = new OpenAICompatibleProvider('custom', {
-          apiKey: settings.apiKey,
-          baseUrl: settings.baseUrl,
-          model: settings.model,
-        });
-      } else {
-        provider = OpenAICompatibleProvider.createPreset(settings.provider, settings.apiKey);
+      const apiKey = resolveSettingsApiKey(settings);
+      if (!apiKey) {
+        setTestStatus('error');
+        setTestError('Add an API key or set OPENAI_API_KEY / VITE_OPENAI_API_KEY in .env.local');
+        return;
       }
+      const model = settings.model.trim() || DEFAULT_OPENAI_MODEL;
+      const provider = OpenAICompatibleProvider.createOpenAI(apiKey, model);
 
       const response = await provider.generateShader('a simple blue circle');
       if (response.code || response.explanation) {
@@ -239,7 +230,16 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                   name="provider"
                   value={preset.id}
                   checked={settings.provider === preset.id}
-                  onChange={(e) => setSettings({ ...settings, provider: e.target.value })}
+                  onChange={(e) => {
+                    const provider = e.target.value;
+                    setSettings({
+                      ...settings,
+                      provider,
+                      model: provider === 'openai' && !settings.model
+                        ? DEFAULT_OPENAI_MODEL
+                        : settings.model,
+                    });
+                  }}
                   style={{ accentColor: 'var(--accent-blue)' }}
                 />
                 <div>
@@ -293,71 +293,13 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
               color: 'var(--text-secondary)',
               marginTop: 6,
             }}>
-              Stored in local storage. Persists across sessions.
+              Optional if <code>OPENAI_API_KEY</code> is set in Vercel or <code>.env.local</code>.
+              Otherwise stored in local storage.
             </p>
           </div>
         )}
 
-        {/* Custom Provider Settings */}
-        {settings.provider === 'custom' && (
-          <>
-            <div style={{ marginBottom: 20 }}>
-              <label style={{
-                display: 'block',
-                fontSize: 13,
-                fontWeight: 600,
-                color: 'var(--text-secondary)',
-                marginBottom: 8,
-              }}>
-                Base URL
-              </label>
-              <input
-                type="text"
-                value={settings.baseUrl}
-                onChange={(e) => setSettings({ ...settings, baseUrl: e.target.value })}
-                placeholder="https://api.example.com/v1"
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  background: 'var(--bg-tertiary)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: 6,
-                  color: 'var(--text-primary)',
-                  fontSize: 13,
-                }}
-              />
-            </div>
-            <div style={{ marginBottom: 20 }}>
-              <label style={{
-                display: 'block',
-                fontSize: 13,
-                fontWeight: 600,
-                color: 'var(--text-secondary)',
-                marginBottom: 8,
-              }}>
-                Model
-              </label>
-              <input
-                type="text"
-                value={settings.model}
-                onChange={(e) => setSettings({ ...settings, model: e.target.value })}
-                placeholder="gpt-4o-mini"
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  background: 'var(--bg-tertiary)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: 6,
-                  color: 'var(--text-primary)',
-                  fontSize: 13,
-                }}
-              />
-            </div>
-          </>
-        )}
-
-        {/* Model for non-custom providers */}
-        {settings.provider !== 'mock' && settings.provider !== 'custom' && (
+        {settings.provider === 'openai' && (
           <div style={{ marginBottom: 20 }}>
             <label style={{
               display: 'block',
@@ -366,13 +308,13 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
               color: 'var(--text-secondary)',
               marginBottom: 8,
             }}>
-              Model (optional)
+              Model
             </label>
             <input
               type="text"
               value={settings.model}
               onChange={(e) => setSettings({ ...settings, model: e.target.value })}
-              placeholder={PROVIDER_DEFAULT_MODELS[settings.provider] || 'Leave empty for default'}
+              placeholder={DEFAULT_OPENAI_MODEL}
               style={{
                 width: '100%',
                 padding: '8px 12px',
@@ -381,13 +323,14 @@ export function SettingsPanel({ isOpen, onClose }: SettingsPanelProps) {
                 borderRadius: 6,
                 color: 'var(--text-primary)',
                 fontSize: 13,
+                fontFamily: 'var(--font-mono)',
               }}
             />
           </div>
         )}
 
         {/* Test Button */}
-        {settings.provider !== 'mock' && settings.apiKey && (
+        {settings.provider !== 'mock' && resolveSettingsApiKey(settings) && (
           <div style={{ marginBottom: 20 }}>
             <button
               className="toolbar-btn"
